@@ -3,7 +3,7 @@ import os
 import time
 import websocket
 from src.databases.mongodb import MongoDB
-from src.utils.file_utils import smart_open
+from src.utils.file_utils import init_last_synced_file, read_last_synced_file, write_last_synced_time
 
 
 class CrawlBinancePriceRealtimeJob:
@@ -11,29 +11,16 @@ class CrawlBinancePriceRealtimeJob:
         self.item_exporter = item_exporter
         self.coin = coin.upper()
         self.last_sync_file = last_sync_file
-
-    def read_last_sync_time(self):
-        if not self.last_sync_file or not os.path.exists(self.last_sync_file):
-            return 0
-        with smart_open(self.last_sync_file, "r") as f:
-            try:
-                return float(f.read().strip())
-            except:
-                return 0
-
-    def write_last_sync_time(self, timestamp: float):
-        if self.last_sync_file:
-            with smart_open(self.last_sync_file, "w") as f:
-                f.write(str(timestamp))
+        init_last_synced_file(0, self.last_sync_file)
 
     def on_message(self, ws, message):
         data = json.loads(message)
         price = float(data['p'])
-        trade_time = data['T'] / 1000
-        event_time = data['E'] / 1000
+        trade_time = int(data['T'] / 1000)
+        event_time = int(data['E'] / 1000)
         now = time.time()
 
-        last_sync = self.read_last_sync_time()
+        last_sync = read_last_synced_file(self.last_sync_file)
 
         if now - last_sync < 1.0:
             return
@@ -43,11 +30,11 @@ class CrawlBinancePriceRealtimeJob:
             'price': price,
             'event_time': event_time,
             'trade_time': trade_time,
-            'recv_time': int(now * 1000)
+            'recv_time': now
         }
 
         self.item_exporter.insert_realtime_price(doc)
-        self.write_last_sync_time(now)
+        write_last_synced_time(self.last_sync_file, now)
 
     def on_error(self, ws, error):
         print(f"[{self.coin}] ❌ WebSocket Error:", error)

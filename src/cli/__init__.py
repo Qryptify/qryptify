@@ -1,6 +1,7 @@
 import click
 
 from src.cli.binance_price_realtime_crawler import binance_price_realtime_crawler
+from src.cli.binance_candlestick_crawler import binance_candlestick_crawler
 
 
 @click.group()
@@ -12,3 +13,4 @@ def cli(ctx):
 
 
 cli.add_command(binance_price_realtime_crawler, "binance_price_realtime_crawler")
+cli.add_command(binance_candlestick_crawler, "binance_candlestick_crawler")

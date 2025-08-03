@@ -25,6 +25,7 @@ class MongoDB:
 
         self._collectors_col = self.mongo_db[MongoDBCollections.collectors]
         self._prices_col = self.mongo_db[MongoDBCollections.prices]
+        self._candlesticks_sol = self.mongo_db[MongoDBCollections.candlesticks]
 
     def get_latest_price(self, coin):
         filters = {
@@ -34,5 +35,15 @@ class MongoDB:
         return doc['price']
 
     def insert_realtime_price(self, doc):
-        self._prices_col.insert_one(doc)
+        self._prices_col.update_one(
+            {'coin': doc['coin'], 'event_time': doc['event_time']},
+            {"$set": doc},
+            upsert=True
+        )
 
+    def insert_realtime_candle(self, doc):
+        self._candlesticks_sol.update_one(
+            {"timestamp": doc["timestamp"], "symbol": doc["symbol"], "interval": doc["interval"]},
+            {"$set": doc},
+            upsert=True
+        )
