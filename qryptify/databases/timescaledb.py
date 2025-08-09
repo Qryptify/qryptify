@@ -1,13 +1,11 @@
 import sys
 
+from loguru import logger
 import psycopg2
 from psycopg2.extras import execute_values
 
 from qryptify.config.config import TimescaleDBConfig
 from qryptify.constants.timescale_constants import TimescaleDBTables
-from qryptify.utils.logger_utils import get_logger
-
-logger = get_logger('TimescaleDB')
 
 
 class TimescaleDB:

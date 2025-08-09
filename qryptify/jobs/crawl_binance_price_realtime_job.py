@@ -2,10 +2,10 @@ import json
 import os
 import time
 
+from loguru import logger
 import websocket
 
 from qryptify.databases.timescaledb import TimescaleDB
-from qryptify.utils.file_utils import init_last_synced_file
 from qryptify.utils.file_utils import read_last_synced_file
 from qryptify.utils.file_utils import write_last_synced_time
 

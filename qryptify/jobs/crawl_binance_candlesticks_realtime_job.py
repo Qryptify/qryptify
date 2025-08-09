@@ -1,15 +1,13 @@
 import time
 
 from cli_scheduler import SchedulerJob
+from loguru import logger
 import requests
 
 from qryptify.databases.timescaledb import TimescaleDB
 from qryptify.utils.file_utils import init_last_synced_file
 from qryptify.utils.file_utils import read_last_synced_file
 from qryptify.utils.file_utils import write_last_synced_time
-from qryptify.utils.logger_utils import get_logger
-
-logger = get_logger('Crawl Binance Candlesticks Realtime Job')
 
 
 class CrawlBinanceCandlesticksRealtimeJob(SchedulerJob):

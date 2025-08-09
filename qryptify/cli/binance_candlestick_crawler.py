@@ -1,20 +1,16 @@
+import click
+from loguru import logger
+
+from qryptify.artifacts.binance_supported_pairs import pairs
+from qryptify.constants.binance_constants import BINANCE_INTERVALS
+from qryptify.databases.timescaledb import TimescaleDB
+
+
 def get_binance_interval_str(seconds: int) -> str:
     for k, v in BINANCE_INTERVALS.items():
         if v == seconds:
             return k
     raise ValueError(f"Interval for {seconds} seconds not found.")
-
-
-import click
-
-from qryptify.artifacts.binance_supported_pairs import pairs
-from qryptify.constants.binance_constants import BINANCE_INTERVALS
-from qryptify.databases.timescaledb import TimescaleDB
-from qryptify.jobs.crawl_binance_candlesticks_realtime_job import \
-    CrawlBinanceCandlesticksRealtimeJob
-from qryptify.utils.logger_utils import get_logger
-
-logger = get_logger('Binance Candlesticks Realtime Crawler')
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))

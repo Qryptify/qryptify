@@ -1,12 +1,10 @@
 import click
+from loguru import logger
 
 from qryptify.artifacts.binance_supported_pairs import pairs
 from qryptify.databases.timescaledb import TimescaleDB
 from qryptify.jobs.crawl_binance_price_realtime_job import \
     CrawlBinancePriceRealtimeJob
-from qryptify.utils.logger_utils import get_logger
-
-logger = get_logger('Binance Price Realtime Crawler')
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
