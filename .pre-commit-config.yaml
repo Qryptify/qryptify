@@ -13,6 +13,7 @@ repos:
         name: Format Python code with YAPF
         files: \.py$
         args: ["--in-place", "--recursive"]
+        additional_dependencies: [toml]
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.0.0
