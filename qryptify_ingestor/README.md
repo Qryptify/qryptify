@@ -1,131 +1,75 @@
-# Qryptify Data Ingestor
+# Qryptify Ingestor
 
-## Overview
+Simple Binance Futures kline ingestor that backfills history, streams live candle closes, and stores data in TimescaleDB with safe, idempotent writes.
 
-The **Qryptify Data Ingestor** is a service that:
+## What it does
 
-- Backfills historical candlestick (kline) data from Binance **Futures** API into TimescaleDB.
-- Streams **real-time** closed candlesticks via Binance WebSocket API.
-- Ensures **no duplicates** and **resumes from last saved candle** after downtime.
+- Backfills historical klines per configured pairs
+- Streams closed candles over WebSocket
+- Upserts into a TimescaleDB hypertable (no duplicates)
+- Persists resume pointers per pair to continue after restarts
 
-It is the foundation for backtesting, live trading, and analytics in the Qryptify trading system.
+## Prereqs
 
-## Features
+- Python 3.10+
+- Docker (TimescaleDB via `docker-compose.yml`)
 
-- **Historical Backfill** from a configurable start date.
-- **Live WebSocket Streaming** with sub-second latency after candle close.
-- **TimescaleDB Hypertable Storage** for efficient time-series queries.
-- **Resume on Restart** using a per-symbol `sync_state`.
-- **Idempotent Inserts** via `(symbol, interval, ts)` primary key.
-
-## Architecture
-
-```text
-+---------------------+        REST (backfill)        +---------------------+
-|  Ingestion Service  |------------------------------>|  Binance Futures    |
-|  (main.py)          |                                |  API (REST/WSS)     |
-|                     |<------- WebSocket (live) ---->|  /fapi/v1/klines    |
-+----------+----------+                                +----------+----------+
-           |  upsert (no duplicates)                              |
-           v                                                      |
-+---------------------+      hypertables/unique keys              |
-|   TimescaleDB       |<------------------------------------------+
-|  candlesticks       |
-|  sync_state         |
-+---------------------+
-```
-
-## Requirements
-
-- **Python** 3.10+
-- **Docker** (for TimescaleDB)
-- Binance Futures API access (public endpoints only for this MVP)
-
-## Setup
-
-### 1. Start TimescaleDB
+Start the DB (schema auto-creates from `sql/001_init.sql`):
 
 ```bash
 docker compose up -d
 ```
 
-This runs TimescaleDB on port **5432** with:
-
-- DB: `qryptify`
-- User: `postgres`
-- Password: `postgres`
-
-Schema & hypertables are auto-created via `sql/001_init.sql`.
-
-### 2. Install Dependencies
+## Install
 
 ```bash
-pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
+pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz loguru
 ```
 
-### 3. Configure
+## Configure
 
 Edit `qryptify_ingestor/config.yaml`.
 
-Use symbol-interval pairs to precisely control subscriptions:
-
-```yaml
-pairs:
-  - BTCUSDT/1m
-  - BTCUSDT/1h
-  - ETHUSDT-1m
-  - BNBUSDT/15m
-rest:
-  klines_limit: 1500
-  endpoint: "https://fapi.binance.com"
-ws:
-  endpoint: "wss://fstream.binance.com/stream"
-db:
-  dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
-backfill:
-  start_date: "2023-01-01T00:00:00Z"
-```
-
 Notes:
 
-- Accepts either `SYMBOL/interval` or `SYMBOL-interval` formats.
-- Backfill and live streaming honor exactly these pairs (mixed intervals allowed).
+- Pair formats supported: `SYMBOL/interval`, `SYMBOL-interval`, or `{symbol, interval}`
+- Allowed intervals: `1m, 3m, 5m, 15m, 1h, 4h`
 
-### 4. Run
+## Run
 
 ```bash
 python main.py
 ```
 
-- Step 1: Backfills from `start_date` → current time.
-- Step 2: Switches to WebSocket live mode and runs until stopped.
+Flow:
 
-Stop with **Ctrl + C** (safe; progress is saved in DB).
+- Backfill from `backfill.start_date` or last saved close
+- Switch to live mode and append closed candles
 
-## Verifying Data
+Stop with Ctrl+C. Progress is saved in `sync_state`.
 
-Use the provided script:
+## Verify
 
 ```bash
 ./verify_ingestion.sh
 ```
 
-This checks:
+Shows the Timescale extension, hypertables, coverage, resume pointers, and lag.
 
-1. TimescaleDB extension installed.
-2. Hypertables exist.
-3. Coverage per symbol/interval.
-4. Resume pointer (`sync_state`).
-5. Duplicate key sanity.
-6. Live data lag from now.
+## Reset DB (clean slate)
 
-Example:
+To wipe all data and reinitialize schema/hypertables:
 
-```text
-============================================================
-4) Candle coverage per (symbol, interval)
-============================================================
-BTCUSDT  1m   2023-01-01 00:00:00+00   2025-08-10 09:50:00+00   1234567
-ETHUSDT  1m   2023-01-01 00:00:00+00   2025-08-10 09:50:00+00   1234567
-BNBUSDT  1m   2023-01-01 00:00:00+00   2025-08-10 09:50:00+00   1234567
+```bash
+./reset_db.sh      # prompts confirm, recreates DB, waits healthy
+./reset_db.sh -f   # skip confirmation
 ```
+
+## Schema (brief)
+
+- Table: `candlesticks` (hypertable on `ts`, 1-day chunks)
+- PK: `(symbol, interval, ts)` to ensure idempotency
+- Compression: enabled with `compress_orderby = ts DESC`, `compress_segmentby = symbol, interval`; policy after 7 days
+- Resume: `sync_state(symbol, interval, last_closed_ts)`
+
+Conventions: `symbol` uppercased; numeric columns use double precision for performance.
