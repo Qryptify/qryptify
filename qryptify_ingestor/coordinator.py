@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from loguru import logger
 from tenacity import retry
 from tenacity import stop_after_attempt
