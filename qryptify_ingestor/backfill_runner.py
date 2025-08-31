@@ -5,6 +5,8 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Dict, List
 
+from loguru import logger
+
 
 def _to_dt(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
@@ -48,6 +50,9 @@ async def run_backfill(cfg, repo, client):
             start_dt = max_dt(min_start,
                               (last + step_of(itv)) if last else min_start)
             start_ms = _to_ms(start_dt)
+            logger.info(
+                f"Backfill {sym}/{itv} from {start_dt.isoformat()} (limit={limit})"
+            )
 
             while True:
                 batch = await client.klines(sym,
@@ -55,16 +60,24 @@ async def run_backfill(cfg, repo, client):
                                             start_ms=start_ms,
                                             limit=limit)
                 if not batch:
+                    logger.info(
+                        f"Backfill {sym}/{itv} complete (no more data)")
                     break
                 rows = [_parse_kline(sym, itv, arr) for arr in batch]
                 inserted = repo.upsert_klines(rows)
                 # advance by last close
                 last_close_ms = batch[-1][6]
                 repo.set_last_closed_ts(sym, itv, _to_dt(last_close_ms))
+                logger.info(
+                    f"Backfill {sym}/{itv}: inserted={inserted} last_close={_to_dt(last_close_ms).isoformat()}"
+                )
 
                 # stop when we are very close to "now" (let live take over)
                 if (datetime.now(timezone.utc) -
                         _to_dt(last_close_ms)) < step_of(itv):
+                    logger.info(
+                        f"Backfill {sym}/{itv} up-to-date through {_to_dt(last_close_ms).isoformat()}"
+                    )
                     break
                 start_ms = last_close_ms + 1
 

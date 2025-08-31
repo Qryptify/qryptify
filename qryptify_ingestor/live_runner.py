@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from datetime import timezone
 
+from loguru import logger
+
 
 def _to_dt(ms: int):  # shared tiny helper
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
@@ -31,6 +33,7 @@ async def run_live(cfg, repo, client):
     intervals = cfg["intervals"]
     assert len(intervals) == 1, "MVP: single interval for WS"
     itv = intervals[0]
+    logger.info(f"Live streaming started for {symbols} at interval {itv}")
 
     async for msg in client.ws_kline_stream(symbols, itv):
         k = msg["k"]
@@ -39,3 +42,6 @@ async def run_live(cfg, repo, client):
             row = _row_from_k(sym, k, itv)
             repo.upsert_klines([row])
             repo.set_last_closed_ts(sym, itv, row["close_time"])
+            logger.debug(
+                f"Live close {sym}/{itv} at {row['close_time'].isoformat()} close={row['close']}"
+            )
