@@ -60,14 +60,6 @@ Schema & hypertables are auto-created via `sql/001_init.sql`.
 ### 2. Install Dependencies
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Or directly:
-
-```bash
 pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
 ```
 
