@@ -65,25 +65,7 @@ pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
 
 ### 3. Configure
 
-Edit `qryptify_ingestor/config.yaml`:
-
-```yaml
-symbols: [BTCUSDT, ETHUSDT, BNBUSDT]
-intervals: [1m]
-rest:
-  klines_limit: 1500
-  endpoint: "https://fapi.binance.com"
-ws:
-  endpoint: "wss://fstream.binance.com/stream"
-  reconnect_initial_ms: 500
-  reconnect_max_ms: 8000
-db:
-  dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
-safety:
-  max_clock_skew_ms: 1000
-backfill:
-  start_date: "2023-01-01T00:00:00Z"
-```
+Edit `qryptify_ingestor/config.yaml`.
 
 ### 4. Run
 
