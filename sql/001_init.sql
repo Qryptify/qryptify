@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 CREATE TABLE IF NOT EXISTS candlesticks (
   ts TIMESTAMPTZ NOT NULL,
   symbol TEXT NOT NULL CHECK (symbol = upper(symbol)),
-  interval TEXT NOT NULL CHECK (interval IN ('1m','3m','5m','15m','1h')),
+  interval TEXT NOT NULL CHECK (interval IN ('1m','3m','5m','15m','1h','4h')),
   open DOUBLE PRECISION NOT NULL,
   high DOUBLE PRECISION NOT NULL,
   low  DOUBLE PRECISION NOT NULL,
@@ -35,7 +35,7 @@ SELECT add_compression_policy('candlesticks', INTERVAL '7 days');
 -- Sync state for resume
 CREATE TABLE IF NOT EXISTS sync_state (
   symbol TEXT NOT NULL CHECK (symbol = upper(symbol)),
-  interval TEXT NOT NULL CHECK (interval IN ('1m','3m','5m','15m','1h')),
+  interval TEXT NOT NULL CHECK (interval IN ('1m','3m','5m','15m','1h','4h')),
   last_closed_ts TIMESTAMPTZ,
   PRIMARY KEY (symbol, interval)
 );

@@ -28,29 +28,12 @@ pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz loguru
 
 ## Configure
 
-Edit `qryptify_ingestor/config.yaml`:
-
-```yaml
-pairs:
-  - BTCUSDT/1h
-  - ETHUSDT/1h
-  - BNBUSDT/1h
-  - BTCUSDT/1m
-rest:
-  klines_limit: 1500
-  endpoint: "https://fapi.binance.com"
-ws:
-  endpoint: "wss://fstream.binance.com/stream"
-db:
-  dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
-backfill:
-  start_date: "2023-01-01T00:00:00Z"
-```
+Edit `qryptify_ingestor/config.yaml`.
 
 Notes:
 
 - Pair formats supported: `SYMBOL/interval`, `SYMBOL-interval`, or `{symbol, interval}`
-- Allowed intervals: `1m, 3m, 5m, 15m, 1h`
+- Allowed intervals: `1m, 3m, 5m, 15m, 1h, 4h`
 
 ## Run
 
