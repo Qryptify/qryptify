@@ -1,5 +1,8 @@
 pairs:
   - BTCUSDT/4h
+  - BTCUSDT/1h
+  - BTCUSDT/15m
+  - BTCUSDT/1m
   - ETHUSDT/4h
   - BNBUSDT/4h
 rest:
@@ -10,4 +13,4 @@ ws:
 db:
   dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
 backfill:
-  start_date: "2023-01-01T00:00:00Z" # min boundary
+  start_date: "2022-01-01T00:00:00Z" # min boundary

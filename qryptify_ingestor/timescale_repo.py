@@ -85,6 +85,61 @@ class TimescaleRepo:
             conn.rollback()
             raise
 
+    # Reads ------------------------------------------------------------------
+    def fetch_ohlcv(
+        self,
+        symbol: str,
+        interval: str,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        limit: Optional[int] = None,
+    ) -> list[dict]:
+        """Fetch OHLCV rows as a list of dicts ordered by ts ASC.
+
+        Provides a thin, dependency-free access layer for strategy/backtest use.
+        """
+        conn = self._require_conn()
+        clauses = ["symbol=%s", "interval=%s"]
+        params: list[object] = [symbol, interval]
+        if start is not None:
+            clauses.append("ts >= %s")
+            params.append(start)
+        if end is not None:
+            clauses.append("ts <= %s")
+            params.append(end)
+        where = " AND ".join(clauses)
+
+        sql = (
+            "SELECT ts, symbol, interval, open, high, low, close, volume, close_time,\n"
+            "       quote_asset_volume, number_of_trades, taker_buy_base, taker_buy_quote\n"
+            f"FROM candlesticks WHERE {where} ORDER BY ts ASC")
+        if limit is not None:
+            sql += " LIMIT %s"
+            params.append(limit)
+
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall() or []
+        # row_factory=dict_row already, so rows are dicts
+        return list(rows)
+
+    def fetch_latest_n(self, symbol: str, interval: str, n: int) -> list[dict]:
+        """Fetch latest N bars ordered ASC (oldest first)."""
+        conn = self._require_conn()
+        with conn.cursor() as cur:
+            cur.execute(
+                ("SELECT ts, symbol, interval, open, high, low, close, volume, close_time,\n"
+                 "       quote_asset_volume, number_of_trades, taker_buy_base, taker_buy_quote\n"
+                 "FROM candlesticks\n"
+                 "WHERE symbol=%s AND interval=%s\n"
+                 "ORDER BY ts DESC\n"
+                 "LIMIT %s"),
+                (symbol, interval, n),
+            )
+            rows = cur.fetchall() or []
+        rows.reverse()
+        return rows
+
     def get_last_closed_ts(self, symbol: str,
                            interval: str) -> Optional[datetime]:
         conn = self._require_conn()
