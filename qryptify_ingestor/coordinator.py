@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from loguru import logger
 from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_exponential
@@ -18,11 +19,10 @@ async def run_all(cfg):
     repo = TimescaleRepo(cfg["db"]["dsn"])
     repo.connect()
     try:
-        # Optional: check server clock skew
         _ = await client.server_time_ms()
-        # Backfill first
+        logger.info("Backfill phase starting")
         await run_backfill(cfg, repo, client)
-        # Then live streaming until killed
+        logger.info("Live phase starting")
         await run_live(cfg, repo, client)
     finally:
         repo.close()

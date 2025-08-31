@@ -60,38 +60,36 @@ Schema & hypertables are auto-created via `sql/001_init.sql`.
 ### 2. Install Dependencies
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Or directly:
-
-```bash
 pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
 ```
 
 ### 3. Configure
 
-Edit `qryptify_ingestor/config.yaml`:
+Edit `qryptify_ingestor/config.yaml`.
+
+Use symbol-interval pairs to precisely control subscriptions:
 
 ```yaml
-symbols: [BTCUSDT, ETHUSDT, BNBUSDT]
-intervals: [1m]
+pairs:
+  - BTCUSDT/1m
+  - BTCUSDT/1h
+  - ETHUSDT-1m
+  - BNBUSDT/15m
 rest:
   klines_limit: 1500
   endpoint: "https://fapi.binance.com"
 ws:
   endpoint: "wss://fstream.binance.com/stream"
-  reconnect_initial_ms: 500
-  reconnect_max_ms: 8000
 db:
   dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
-safety:
-  max_clock_skew_ms: 1000
 backfill:
   start_date: "2023-01-01T00:00:00Z"
 ```
+
+Notes:
+
+- Accepts either `SYMBOL/interval` or `SYMBOL-interval` formats.
+- Backfill and live streaming honor exactly these pairs (mixed intervals allowed).
 
 ### 4. Run
 

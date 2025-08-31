@@ -4,6 +4,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Iterable, Optional
 
+from loguru import logger
 import psycopg
 from psycopg.rows import dict_row
 
@@ -17,10 +18,12 @@ class TimescaleRepo:
         self._conn = psycopg.connect(self._dsn, autocommit=False)
         self._conn.execute("SET TIME ZONE 'UTC'")
         self._cur = self._conn.cursor(row_factory=dict_row)
+        logger.info("Connected to TimescaleDB")
 
     def close(self):
         self._cur.close()
         self._conn.close()
+        logger.info("Closed TimescaleDB connection")
 
     def upsert_klines(self, rows: Iterable[dict]) -> int:
         sql = """

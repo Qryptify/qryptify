@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from datetime import timezone
 
+from loguru import logger
+
+from .config_utils import symbol_interval_pairs_from_cfg
+
 
 def _to_dt(ms: int):  # shared tiny helper
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
@@ -27,15 +31,18 @@ def _row_from_k(symbol: str, k: dict, interval: str) -> dict:
 
 
 async def run_live(cfg, repo, client):
-    symbols = cfg["symbols"]
-    intervals = cfg["intervals"]
-    assert len(intervals) == 1, "MVP: single interval for WS"
-    itv = intervals[0]
+    pairs = symbol_interval_pairs_from_cfg(cfg)
+    pretty = ", ".join([f"{s}/{i}" for s, i in pairs])
+    logger.info(f"Live streaming started for: {pretty}")
 
-    async for msg in client.ws_kline_stream(symbols, itv):
+    async for msg in client.ws_kline_stream_pairs(pairs):
         k = msg["k"]
         sym = msg["symbol"]
         if k.get("x") is True:  # candle closed
-            row = _row_from_k(sym, k, itv)
+            interval = k.get("i")
+            row = _row_from_k(sym, k, interval)
             repo.upsert_klines([row])
-            repo.set_last_closed_ts(sym, itv, row["close_time"])
+            repo.set_last_closed_ts(sym, interval, row["close_time"])
+            logger.debug(
+                f"Live close {sym}/{interval} at {row['close_time'].isoformat()} close={row['close']}"
+            )

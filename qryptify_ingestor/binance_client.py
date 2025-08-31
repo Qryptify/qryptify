@@ -5,6 +5,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+from loguru import logger
 import websockets
 
 KLINE_PATH = "/fapi/v1/klines"
@@ -40,24 +41,31 @@ class BinanceClient:
             r.raise_for_status()
             return r.json()
 
-    async def ws_kline_stream(self, symbols: list[str], interval: str):
+    async def ws_kline_stream_pairs(self, pairs: list[tuple[str, str]]):
         """
-        Yields closed kline payloads as dicts:
+        Yields closed kline payloads as dicts for mixed (symbol, interval) pairs:
         {
-          "s": "BTCUSDT",
+          "symbol": "BTCUSDT",
           "k": { "t": open_time, "T": close_time, "i": "1m", "x": true, ... }
         }
         """
-        streams = "/".join(f"{s.lower()}@kline_{interval}" for s in symbols)
-        url = f"{self._ws_base}?streams={streams}"
+        streams = [f"{s.lower()}@kline_{i}" for s, i in pairs]
+        async for item in self._ws_kline_stream_from_streams(streams):
+            yield item
+
+    async def _ws_kline_stream_from_streams(self, streams: list[str]):
+        streams_qs = "/".join(streams)
+        url = f"{self._ws_base}?streams={streams_qs}"
         async for ws in _ws_reconnect(url):
             try:
+                logger.info(f"WebSocket connected: {url}")
                 async for msg in ws:
                     data = json.loads(msg)
                     k = data.get("data", {}).get("k")
                     if k and k.get("x") is True:
                         yield {"symbol": data["data"]["s"], "k": k}
             except websockets.ConnectionClosed:
+                logger.warning("WebSocket connection closed; reconnecting…")
                 continue
 
 
@@ -69,6 +77,7 @@ async def _ws_reconnect(url: str, initial_ms: int = 500, max_ms: int = 8000):
                 yield ws
                 backoff = initial_ms  # reset after a clean session
         except Exception:
+            logger.warning(f"WebSocket connect error; retry in {backoff} ms")
             await asyncio.sleep(backoff / 1000)
             backoff = min(backoff * 2, max_ms)
             continue

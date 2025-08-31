@@ -1,5 +1,6 @@
 import asyncio
 
+from loguru import logger
 import yaml
 
 from qryptify_ingestor.coordinator import run_all
@@ -12,4 +13,6 @@ def load_cfg():
 
 if __name__ == "__main__":
     cfg = load_cfg()
+    pairs = cfg.get("pairs")
+    logger.info(f"Starting Qryptify Ingestor | pairs={pairs}")
     asyncio.run(run_all(cfg))
