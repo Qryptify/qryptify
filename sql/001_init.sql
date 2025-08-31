@@ -27,6 +27,8 @@ SELECT create_hypertable('candlesticks', 'ts', if_not_exists => TRUE, chunk_time
 
 -- Enable compression by (symbol, interval) for older data (7 days)
 ALTER TABLE candlesticks SET (timescaledb.compress);
+-- Explicitly set compression order-by to avoid overlap with segment-by
+ALTER TABLE candlesticks SET (timescaledb.compress_orderby = 'ts DESC');
 ALTER TABLE candlesticks SET (timescaledb.compress_segmentby = 'symbol, interval');
 SELECT add_compression_policy('candlesticks', INTERVAL '7 days');
 

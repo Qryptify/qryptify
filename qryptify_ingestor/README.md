@@ -69,6 +69,21 @@ Notes on schema:
 pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
 ```
 
+### Reset/Clean DB
+
+To wipe all database data and reinitialize the schema/hypertables via `sql/001_init.sql`:
+
+```bash
+./reset_db.sh       # prompts for confirmation, recreates DB, waits for healthy
+./reset_db.sh -f    # same, but skip confirmation
+```
+
+Notes:
+
+- Destructive: this removes the Docker volume (`dbdata`) defined in `docker-compose.yml` and all data in it.
+- After reset, the container comes back up and the init script(s) under `sql/` run automatically.
+- Use `./verify_ingestion.sh` to confirm extension/hypertables.
+
 ### 3. Configure
 
 Edit `qryptify_ingestor/config.yaml`.
