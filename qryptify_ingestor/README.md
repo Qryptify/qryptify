@@ -67,6 +67,30 @@ pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz
 
 Edit `qryptify_ingestor/config.yaml`.
 
+Use symbol-interval pairs to precisely control subscriptions:
+
+```yaml
+pairs:
+  - BTCUSDT/1m
+  - BTCUSDT/1h
+  - ETHUSDT-1m
+  - BNBUSDT/15m
+rest:
+  klines_limit: 1500
+  endpoint: "https://fapi.binance.com"
+ws:
+  endpoint: "wss://fstream.binance.com/stream"
+db:
+  dsn: "postgresql://postgres:postgres@localhost:5432/qryptify"
+backfill:
+  start_date: "2023-01-01T00:00:00Z"
+```
+
+Notes:
+
+- Accepts either `SYMBOL/interval` or `SYMBOL-interval` formats.
+- Backfill and live streaming honor exactly these pairs (mixed intervals allowed).
+
 ### 4. Run
 
 ```bash

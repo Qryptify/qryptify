@@ -41,16 +41,21 @@ class BinanceClient:
             r.raise_for_status()
             return r.json()
 
-    async def ws_kline_stream(self, symbols: list[str], interval: str):
+    async def ws_kline_stream_pairs(self, pairs: list[tuple[str, str]]):
         """
-        Yields closed kline payloads as dicts:
+        Yields closed kline payloads as dicts for mixed (symbol, interval) pairs:
         {
-          "s": "BTCUSDT",
+          "symbol": "BTCUSDT",
           "k": { "t": open_time, "T": close_time, "i": "1m", "x": true, ... }
         }
         """
-        streams = "/".join(f"{s.lower()}@kline_{interval}" for s in symbols)
-        url = f"{self._ws_base}?streams={streams}"
+        streams = [f"{s.lower()}@kline_{i}" for s, i in pairs]
+        async for item in self._ws_kline_stream_from_streams(streams):
+            yield item
+
+    async def _ws_kline_stream_from_streams(self, streams: list[str]):
+        streams_qs = "/".join(streams)
+        url = f"{self._ws_base}?streams={streams_qs}"
         async for ws in _ws_reconnect(url):
             try:
                 logger.info(f"WebSocket connected: {url}")

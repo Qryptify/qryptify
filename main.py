@@ -13,7 +13,6 @@ def load_cfg():
 
 if __name__ == "__main__":
     cfg = load_cfg()
-    logger.info(
-        f"Starting Qryptify Ingestor | symbols={cfg.get('symbols')} intervals={cfg.get('intervals')}"
-    )
+    pairs = cfg.get("pairs")
+    logger.info(f"Starting Qryptify Ingestor | pairs={pairs}")
     asyncio.run(run_all(cfg))
