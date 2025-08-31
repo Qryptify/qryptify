@@ -57,6 +57,12 @@ This runs TimescaleDB on port **5432** with:
 
 Schema & hypertables are auto-created via `sql/001_init.sql`.
 
+Notes on schema:
+
+- Prices/volumes use double precision for performance.
+- `symbol` stored uppercase; `interval` limited to: `1m, 3m, 5m, 15m, 1h`.
+- Hypertable chunks are 1 day with compression after 7 days.
+
 ### 2. Install Dependencies
 
 ```bash
