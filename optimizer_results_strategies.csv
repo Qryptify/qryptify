@@ -1,6 +1,0 @@
-symbol,interval,strategy,params,risk,atr_mult,pnl,max_dd,trades,equity_end,cagr
-BTCUSDT,1h,boll_ls,"period=50,mult=3.0",0.005,2.0,8373.59,2003.37,393,18373.59,18.05
-BTCUSDT,4h,ema_ls,"fast=10,slow=200",0.01,2.0,7836.42,2871.86,55,17836.42,24.23
-ETHUSDT,4h,boll_ls,"period=50,mult=2.5",0.01,2.0,4048.68,1752.46,82,14048.68,13.6
-BNBUSDT,4h,ema_ls,"fast=10,slow=50",0.01,2.5,4022.79,2832.54,142,14022.79,13.52
-BTCUSDT,15m,ema_ls,"fast=20,slow=100",0.005,3.0,1627.71,2134.66,424,11627.71,17.89

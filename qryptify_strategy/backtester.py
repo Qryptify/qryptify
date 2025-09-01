@@ -58,6 +58,45 @@ def _sign(x: float) -> int:
     return 0
 
 
+def _reset_position(state: BacktestState) -> None:
+    state.position_qty = 0.0
+    state.entry_price = None
+    state.entry_ts = None
+    state.stop_price = None
+    state.open_fees = 0.0
+    state.peak_price = None
+    state.trough_price = None
+
+
+def _close_position(
+    state: BacktestState,
+    bars: List[Bar],
+    i: int,
+    exit_ts: datetime,
+    exit_price: float,
+    fee_bps: float,
+    reason: str,
+) -> Trade:
+    qty = state.position_qty
+    exit_p = exit_price
+    fees = _apply_fees(abs(qty) * exit_p, fee_bps)
+    pnl = ((exit_p -
+            (state.entry_price or exit_p)) * qty) - fees - state.open_fees
+    state.equity += pnl
+    trade = Trade(
+        entry_ts=state.entry_ts or (bars[i - 1].ts if i > 0 else bars[i].ts),
+        exit_ts=exit_ts,
+        entry_price=state.entry_price or 0.0,
+        exit_price=exit_p,
+        qty=qty,
+        pnl=pnl,
+        fees=fees + state.open_fees,
+        reason=reason,
+    )
+    _reset_position(state)
+    return trade
+
+
 def backtest(
     symbol: str,
     interval: str,
@@ -143,32 +182,10 @@ def backtest(
         next_open_price = bars[i + 1].open if (i + 1) < len(bars) else None
 
         if exit_reason and state.position_qty != 0:
-            qty = state.position_qty
-            exit_p = exit_price or bar.close
-            fees = _apply_fees(abs(qty) * exit_p, risk.fee_bps)
-            pnl = (
-                (exit_p -
-                 (state.entry_price or exit_p)) * qty) - fees - state.open_fees
-            state.equity += pnl
             trades.append(
-                Trade(
-                    entry_ts=state.entry_ts
-                    or (bars[i - 1].ts if i > 0 else bar.ts),
-                    exit_ts=bar.ts,
-                    entry_price=state.entry_price or 0.0,
-                    exit_price=exit_p,
-                    qty=qty,
-                    pnl=pnl,
-                    fees=fees + state.open_fees,
-                    reason=exit_reason,
-                ))
-            state.position_qty = 0.0
-            state.entry_price = None
-            state.entry_ts = None
-            state.stop_price = None
-            state.open_fees = 0.0
-            state.peak_price = None
-            state.trough_price = None
+                _close_position(state, bars, i, bar.ts,
+                                (exit_price or bar.close), risk.fee_bps,
+                                exit_reason))
 
         if next_open_price is not None and sig is not None:
             desired = max(min(int(sig.target), 1), -1)
@@ -179,29 +196,9 @@ def backtest(
                 side = "SELL" if state.position_qty > 0 else "BUY"
                 px_exit = _price_with_slippage(next_open_price,
                                                risk.slippage_bps, side)
-                qty = state.position_qty
-                fees = _apply_fees(abs(qty) * px_exit, risk.fee_bps)
-                pnl = ((px_exit - (state.entry_price or px_exit)) *
-                       qty) - fees - state.open_fees
-                state.equity += pnl
                 trades.append(
-                    Trade(
-                        entry_ts=state.entry_ts or bar.ts,
-                        exit_ts=bars[i + 1].ts,
-                        entry_price=state.entry_price or 0.0,
-                        exit_price=px_exit,
-                        qty=qty,
-                        pnl=pnl,
-                        fees=fees + state.open_fees,
-                        reason=sig.reason or "signal_exit",
-                    ))
-                state.position_qty = 0.0
-                state.entry_price = None
-                state.entry_ts = None
-                state.stop_price = None
-                state.open_fees = 0.0
-                state.peak_price = None
-                state.trough_price = None
+                    _close_position(state, bars, i, bars[i + 1].ts, px_exit,
+                                    risk.fee_bps, sig.reason or "signal_exit"))
 
             # Then, enter if desired is non-flat and we are currently flat
             if desired != 0 and state.position_qty == 0 and atr is not None:
@@ -250,21 +247,10 @@ def backtest(
         last_bar = bars[-1]
         side = "SELL" if state.position_qty > 0 else "BUY"
         px = _price_with_slippage(last_bar.close, risk.slippage_bps, side)
-        fees = _apply_fees(abs(state.position_qty) * px, risk.fee_bps)
-        pnl = (px - (state.entry_price
-                     or px)) * state.position_qty - fees - state.open_fees
-        state.equity += pnl
         trades.append(
-            Trade(
-                entry_ts=state.entry_ts or bars[-1].ts,
-                exit_ts=last_bar.ts,
-                entry_price=state.entry_price or 0.0,
-                exit_price=px,
-                qty=state.position_qty,
-                pnl=pnl,
-                fees=fees + state.open_fees,
-                reason="final_close",
-            ))
+            _close_position(state, bars,
+                            len(bars) - 1, last_bar.ts, px, risk.fee_bps,
+                            "final_close"))
 
     wins = [t for t in trades if t.pnl > 0]
     losses = [t for t in trades if t.pnl <= 0]
