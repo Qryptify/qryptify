@@ -25,7 +25,16 @@ def _parse_pair(pair: str) -> Tuple[str, str]:
 def _load_cfg_pairs(path: str) -> List[str]:
     with open(path, "r") as f:
         cfg = yaml.safe_load(f) or {}
-    pairs = [str(p) for p in (cfg.get("pairs") or [])]
+    pairs_raw = cfg.get("pairs") or []
+    pairs: List[str] = []
+    for p in pairs_raw:
+        if isinstance(p, dict):
+            sym = str(p.get("symbol", "")).strip()
+            ivl = str(p.get("interval", "")).strip()
+            if sym and ivl:
+                pairs.append(f"{sym}/{ivl}")
+                continue
+        pairs.append(str(p))
     return pairs
 
 

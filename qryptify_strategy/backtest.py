@@ -196,6 +196,8 @@ def main() -> None:
         print(f"  Avg win:    {report.avg_win:.2f}")
         print(f"  Avg loss:   {report.avg_loss:.2f}")
         print(f"  Fees:       {report.total_fees:.2f}")
+        print(
+            f"  Avg fee:    {report.avg_fee_bps:.2f} bps ({report.fee_model})")
         print(f"  PnL:        {report.total_pnl:.2f}")
         print(f"  Equity end: {report.equity_end:.2f}")
         if report.cagr is not None:

@@ -29,7 +29,7 @@ class Result:
     trades: int
     cagr: Optional[float]
     equity_end: float
-    fee_bps: float = 0.0
+    avg_fee_bps: Optional[float] = None
     # optional per-strategy fields for debugging
     fast: Optional[int] = None
     slow: Optional[int] = None
@@ -54,7 +54,8 @@ def eval_grid(
     fee_lookup_fn,
 ) -> List[Result]:
     out: List[Result] = []
-    # fee_lookup_fn will be attached via RiskParams by caller
+    is_dyn = fee_lookup_fn is not None
+    fee_bps_val = 0.0 if is_dyn else 4.0
     for risk in risk_opts:
         for atr_mult in atr_opts:
             # EMA long/short
@@ -74,9 +75,8 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=
-                                0.0,  # dynamic via fee_lookup if provided by caller
-                                fee_lookup=fee_lookup_fn,
+                                fee_bps=fee_bps_val,
+                                fee_lookup=fee_lookup_fn if is_dyn else None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -91,7 +91,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
-                                fee_bps=0.0,
+                                avg_fee_bps=rpt.avg_fee_bps,
                                 fast=fast,
                                 slow=slow,
                             ))
@@ -111,8 +111,8 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=0.0,
-                                fee_lookup=fee_lookup_fn,
+                                fee_bps=fee_bps_val,
+                                fee_lookup=fee_lookup_fn if is_dyn else None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -127,7 +127,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
-                                fee_bps=0.0,
+                                avg_fee_bps=rpt.avg_fee_bps,
                                 bb_period=bb_period,
                                 bb_mult=bb_mult,
                             ))
@@ -153,8 +153,9 @@ def eval_grid(
                                         risk_per_trade=risk,
                                         atr_period=14,
                                         atr_mult_stop=atr_mult,
-                                        fee_bps=0.0,
-                                        fee_lookup=fee_lookup_fn,
+                                        fee_bps=fee_bps_val,
+                                        fee_lookup=fee_lookup_fn
+                                        if is_dyn else None,
                                         slippage_bps=1.0,
                                     ),
                                 )
@@ -171,7 +172,7 @@ def eval_grid(
                                         trades=rpt.trades,
                                         cagr=rpt.cagr,
                                         equity_end=rpt.equity_end,
-                                        fee_bps=0.0,
+                                        avg_fee_bps=rpt.avg_fee_bps,
                                         rsi_period=rsi_period,
                                         entry_low=entry_low,
                                         exit_low=exit_low,
@@ -350,7 +351,15 @@ def main() -> None:
             raise SystemExit(
                 "Provide --pair/--pairs or --config with pairs list")
         for item in cfg_pairs:
-            pair_specs.append(_parse_pair(str(item)))
+            s = None
+            if isinstance(item, dict):
+                sym = str(item.get("symbol", "")).strip()
+                ivl = str(item.get("interval", "")).strip()
+                if sym and ivl:
+                    s = f"{sym}/{ivl}"
+            if s is None:
+                s = str(item)
+            pair_specs.append(_parse_pair(s))
 
     # Resolve strategies
     if args.strategies:
@@ -451,18 +460,19 @@ def main() -> None:
         for r in ranked[:max(1, top_k)]:
             print(
                 f"  strat={r.strategy} params={r.params} risk={r.risk} atr={r.atr_mult} "
-                f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%}"
+                f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%} avg_fee_bps={(r.avg_fee_bps or 0.0):.2f}"
             )
         print("Recommended:")
         print(
             f"  strat={best.strategy} params={best.params} risk={best.risk} atr={best.atr_mult} "
-            f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%}"
+            f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%} avg_fee_bps={(best.avg_fee_bps or 0.0):.2f}"
         )
 
         # Markdown section for this pair
         md_lines.append(f"\n## {symbol} {interval}\n")
+        fees_mode = "dynamic_db" if fee_lookup_fn else "fixed_bps"
         md_lines.append(
-            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%}\n"
+            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%} | avg_fee_bps={(best.avg_fee_bps or 0.0):.2f} | fees={fees_mode}\n"
         )
         # Reproduce command
         cmd = _build_backtest_cmd(symbol, interval, best, args.lookback)
@@ -472,11 +482,11 @@ def main() -> None:
         md_lines.append("```")
         md_lines.append("\nTop Results\n")
         md_lines.append(
-            "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR |\n|---|---|---:|---:|---:|---:|---:|---:|---:|"
+            "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR | Fee(bps) |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"
         )
         for r in ranked[:max(1, top_k)]:
             md_lines.append(
-                f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} |"
+                f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} | {(r.avg_fee_bps or 0.0):.2f} |"
             )
 
         rows_out.append({
@@ -491,6 +501,7 @@ def main() -> None:
             "trades": best.trades,
             "equity_end": round(best.equity_end, 2),
             "cagr": round((best.cagr or 0.0) * 100, 2),
+            "avg_fee_bps": round((best.avg_fee_bps or 0.0), 4),
         })
 
         # Pareto frontier per pair
@@ -513,20 +524,32 @@ def main() -> None:
                         "trades",
                         "equity_end",
                         "cagr",
+                        "avg_fee_bps",
                     ],
                 )
                 writer.writeheader()
                 for r in frontier:
                     writer.writerow({
-                        "strategy": r.strategy,
-                        "params": r.params,
-                        "risk": r.risk,
-                        "atr_mult": r.atr_mult,
-                        "pnl": round(r.pnl, 2),
-                        "dd": round(r.dd, 2),
-                        "trades": r.trades,
-                        "equity_end": round(r.equity_end, 2),
-                        "cagr": round((r.cagr or 0.0) * 100, 2),
+                        "strategy":
+                        r.strategy,
+                        "params":
+                        r.params,
+                        "risk":
+                        r.risk,
+                        "atr_mult":
+                        r.atr_mult,
+                        "pnl":
+                        round(r.pnl, 2),
+                        "dd":
+                        round(r.dd, 2),
+                        "trades":
+                        r.trades,
+                        "equity_end":
+                        round(r.equity_end, 2),
+                        "cagr":
+                        round((r.cagr or 0.0) * 100, 2),
+                        "avg_fee_bps":
+                        round((r.avg_fee_bps or 0.0), 4),
                     })
             print(f"Saved Pareto frontier to {ppath}")
 
@@ -547,6 +570,7 @@ def main() -> None:
                 "trades",
                 "equity_end",
                 "cagr",
+                "avg_fee_bps",
             ],
         )
         writer.writeheader()
@@ -569,6 +593,7 @@ def main() -> None:
                 "trades",
                 "equity_end",
                 "cagr",
+                "avg_fee_bps",
             ]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()

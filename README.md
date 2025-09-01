@@ -37,14 +37,15 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback
 
 # Bollinger 50 × 3.0 on 1h
 python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy bollinger --lookback 100000 \
-  --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --fee-bps 4 --slip-bps 1
+  --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --slip-bps 1
 
 # RSI with EMA filter on 15m
 python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
-  --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --fee-bps 4 --slip-bps 1
+  --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --slip-bps 1
 ```
 
-Key flags: `--pair`, `--strategy (ema|bollinger|rsi)`, `--lookback | --start/--end`, risk (`--equity --risk --atr --atr-mult --fee-bps --slip-bps`), and per‑strategy params.
+Key flags: `--pair`, `--strategy (ema|bollinger|rsi)`, `--lookback | --start/--end`, risk (`--equity --risk --atr --atr-mult --slip-bps`) and per‑strategy params.
+Fees are dynamic by default (from DB snapshots); `--fee-bps` is a fallback when no snapshots exist.
 
 Execution: signals on close; fills at next open (slippage). Stops can gap. ATR sizing; orders respect step/minNotional/tick.
 

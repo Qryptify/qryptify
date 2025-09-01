@@ -31,7 +31,7 @@ def _apply_fees(notional: float, fee_bps: float) -> float:
     return notional * (fee_bps / 10_000.0)
 
 
-def _fee_bps_at(risk: RiskParams, ts: datetime, side: str) -> float:
+def _fee_bps_at(risk: RiskParams, ts: datetime) -> float:
     # Prefer a dynamic lookup if provided in RiskParams; fallback to constant
     fee_lookup = getattr(risk, "fee_lookup", None)
     if callable(fee_lookup):
@@ -91,8 +91,7 @@ def _close_position(
 ) -> Trade:
     qty = state.position_qty
     exit_p = exit_price
-    side = "SELL" if qty > 0 else "BUY"
-    fee_bps = _fee_bps_at(risk, exit_ts, side)
+    fee_bps = _fee_bps_at(risk, exit_ts)
     fees = _apply_fees(abs(qty) * exit_p, fee_bps)
     pnl = ((exit_p -
             (state.entry_price or exit_p)) * qty) - fees - state.open_fees
@@ -206,18 +205,18 @@ def backtest(
 
             # First, flatten if target is different sign or zero while in a position
             if desired != cur_sign and state.position_qty != 0:
-                side = "SELL" if state.position_qty > 0 else "BUY"
-                px_exit = _price_with_slippage(next_open_price,
-                                               risk.slippage_bps, side)
+                px_exit = _price_with_slippage(
+                    next_open_price, risk.slippage_bps,
+                    "SELL" if state.position_qty > 0 else "BUY")
                 trades.append(
                     _close_position(state, bars, i, bars[i + 1].ts, px_exit,
                                     risk, sig.reason or "signal_exit"))
 
             # Then, enter if desired is non-flat and we are currently flat
             if desired != 0 and state.position_qty == 0 and atr is not None:
-                side = "BUY" if desired > 0 else "SELL"
-                px_entry = _price_with_slippage(next_open_price,
-                                                risk.slippage_bps, side)
+                px_entry = _price_with_slippage(
+                    next_open_price, risk.slippage_bps,
+                    "BUY" if desired > 0 else "SELL")
                 risk_cash = state.equity * risk.risk_per_trade
                 stop_dist = atr * risk.atr_mult_stop
                 if stop_dist <= 0:
@@ -231,8 +230,7 @@ def backtest(
                                                  px_entry) < min_notional:
                     prev_close = bar.close
                     continue
-                side_entry = "BUY" if desired > 0 else "SELL"
-                fee_bps_entry = _fee_bps_at(risk, bars[i + 1].ts, side_entry)
+                fee_bps_entry = _fee_bps_at(risk, bars[i + 1].ts)
                 open_fees = _apply_fees(qty * px_entry, fee_bps_entry)
                 state.position_qty = qty if desired > 0 else -qty
                 state.entry_price = px_entry
@@ -250,8 +248,10 @@ def backtest(
                 state.trough_price = px_entry if desired < 0 else None
 
         mtm = state.equity
+        # Mark-to-market includes unrealized PnL minus accrued open fees
         if state.position_qty != 0 and state.entry_price is not None:
             mtm += (bar.close - state.entry_price) * state.position_qty
+            mtm -= state.open_fees
         if mtm > state.max_equity:
             state.max_equity = mtm
         equity_series.append(mtm)
@@ -274,6 +274,11 @@ def backtest(
     avg_loss = sum(t.pnl for t in losses) / len(losses) if losses else 0.0
     total_pnl = sum(t.pnl for t in trades)
     total_fees = sum(t.fees for t in trades)
+    # Effective average fee (bps) across both entry and exit notionals
+    denom = 0.0
+    for t in trades:
+        denom += abs(t.qty) * (t.entry_price + t.exit_price)
+    avg_fee_bps = (total_fees / denom * 10_000.0) if denom > 0 else 0.0
 
     span_sec = max((bars[-1].ts - bars[0].ts).total_seconds(), 1.0)
     years = span_sec / (365.25 * 24 * 3600)
@@ -302,6 +307,9 @@ def backtest(
         avg_win=avg_win,
         avg_loss=avg_loss,
         cagr=cagr,
+        avg_fee_bps=avg_fee_bps,
+        fee_model=("dynamic_db"
+                   if getattr(risk, "fee_lookup", None) else "fixed_bps"),
     )
     strategy.on_finish()
     return rpt, trades

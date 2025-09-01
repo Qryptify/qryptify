@@ -99,7 +99,20 @@ Conventions: `symbol` uppercased; OHLCV stored as DOUBLE PRECISION for speed.
 - `timescale_repo.py`: thin, explicit Timescale access (connect/close, upsert, fetch, resume)
 - `coordinator.py`: orchestrates backfill then live; has retry on transient errors
 
+## Fee snapshots
+
+Strategy backtests and optimizer can apply time‑varying exchange fees from the DB.
+
+Insert a snapshot (maker/taker bps per symbol) for all pairs configured in your YAML:
+
+```bash
+python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
+```
+
+This writes to `exchange_fees(symbol, ts, maker_bps, taker_bps, source, note)`.
+Snapshots are sparse and only created when you run the script; schedule it periodically if your account tier changes.
+
 ## Using with qryptify_strategy
 
-- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV
+- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV and fee snapshots
 - You can pass the same YAML into the optimizer’s `--config` to iterate pairs/strategies and export results
