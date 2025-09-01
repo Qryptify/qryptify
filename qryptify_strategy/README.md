@@ -20,10 +20,10 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback
   --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
 
 # Two-sided EMA (long/short) on 1h
-python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy ema_ls --lookback 32132 --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0 --fee-bps 4 --slip-bps 1
+python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy ema --lookback 32132 --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0 --fee-bps 4 --slip-bps 1
 
 # Two-sided Bollinger on 1h
-python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy boll_ls --bb-period 50 --bb-mult 3.0 \
+python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy bollinger --bb-period 50 --bb-mult 3.0 \
   --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --fee-bps 4 --slip-bps 1 --lookback 32132
 
 # RSI scalping on 15m
@@ -34,7 +34,7 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi \
 Options:
 
 - `--pair`: `SYMBOL/interval`
-- `--strategy`: `ema`, `ema_ls` (long/short), `bollinger`, `boll_ls` (long/short), `rsi`, `rsi_ls` (long/short)
+- `--strategy`: `ema`, `bollinger`, `rsi` (all two-sided)
 - Window: `--lookback` or `--start`/`--end`
 - Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--fee-bps`, `--slip-bps`
 - EMA: `--fast`, `--slow`
@@ -50,12 +50,9 @@ Execution model:
 
 ## Strategies
 
-- EMA crossover (long/flat)
-- EMA crossover long/short (two-sided trend)
-- Bollinger breakout (long/flat)
-- Bollinger breakout long/short
-- RSI mean-reversion (long/flat) with optional EMA filter
-- RSI two-sided (long/short) with optional EMA filter
+- EMA crossover (two-sided)
+- Bollinger breakout (two-sided)
+- RSI mean-reversion (two-sided) with optional EMA filter
 
 ## Code Map
 
