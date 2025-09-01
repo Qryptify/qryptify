@@ -1,3 +1,0 @@
-strategy,params,risk,atr_mult,pnl,dd,trades,equity_end,cagr
-rsi,"period=14,eL=25.0,xL=55.0,ema=200",0.003,3.0,-191.43,211.18,22,9808.57,-0.53
-ema,"fast=10,slow=200",0.003,3.0,-52.79,3973.56,1634,9947.21,-0.14

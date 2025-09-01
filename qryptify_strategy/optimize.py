@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
@@ -12,6 +11,7 @@ from .backtest import _parse_pair
 from .backtest import build_bars
 from .backtest import load_cfg_dsn
 from .backtester import backtest
+from .fees import build_fee_lookup_from_rows
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
@@ -29,6 +29,7 @@ class Result:
     trades: int
     cagr: Optional[float]
     equity_end: float
+    fee_bps: float = 0.0
     # optional per-strategy fields for debugging
     fast: Optional[int] = None
     slow: Optional[int] = None
@@ -50,8 +51,10 @@ def eval_grid(
     slow_opts: Iterable[int],
     risk_opts: Iterable[float],
     atr_opts: Iterable[float],
+    fee_lookup_fn,
 ) -> List[Result]:
     out: List[Result] = []
+    # fee_lookup_fn will be attached via RiskParams by caller
     for risk in risk_opts:
         for atr_mult in atr_opts:
             # EMA long/short
@@ -71,7 +74,9 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=4.0,
+                                fee_bps=
+                                0.0,  # dynamic via fee_lookup if provided by caller
+                                fee_lookup=fee_lookup_fn,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -86,6 +91,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
+                                fee_bps=0.0,
                                 fast=fast,
                                 slow=slow,
                             ))
@@ -105,7 +111,8 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=4.0,
+                                fee_bps=0.0,
+                                fee_lookup=fee_lookup_fn,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -120,6 +127,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
+                                fee_bps=0.0,
                                 bb_period=bb_period,
                                 bb_mult=bb_mult,
                             ))
@@ -145,7 +153,8 @@ def eval_grid(
                                         risk_per_trade=risk,
                                         atr_period=14,
                                         atr_mult_stop=atr_mult,
-                                        fee_bps=4.0,
+                                        fee_bps=0.0,
+                                        fee_lookup=fee_lookup_fn,
                                         slippage_bps=1.0,
                                     ),
                                 )
@@ -162,6 +171,7 @@ def eval_grid(
                                         trades=rpt.trades,
                                         cagr=rpt.cagr,
                                         equity_end=rpt.equity_end,
+                                        fee_bps=0.0,
                                         rsi_period=rsi_period,
                                         entry_low=entry_low,
                                         exit_low=exit_low,
@@ -213,7 +223,6 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result,
         "--equity 10000",
         "--atr 14",
         f"--atr-mult {best.atr_mult}",
-        "--fee-bps 4",
         "--slip-bps 1",
     ]
     # Strategy-specific args parsed from best.params
@@ -408,9 +417,26 @@ def main() -> None:
             repo.close()
         bars = build_bars(rows)
 
+        # Build fee lookup over the backtest time range (taker fees by default)
+        if bars:
+            from qryptify_ingestor.timescale_repo import TimescaleRepo  # type: ignore
+            repo = TimescaleRepo(dsn)
+            repo.connect()
+            try:
+                fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts,
+                                                    bars[-1].ts)
+            finally:
+                repo.close()
+            fee_lookup = build_fee_lookup_from_rows(fee_rows)
+            fee_lookup_fn = (lambda ts, L=fee_lookup: L.get_bps(ts, True)
+                             ) if fee_rows else None
+        else:
+            fee_lookup_fn = None
+
         try:
             results = eval_grid(symbol, interval, bars, strategy_list,
-                                fast_opts, slow_opts, risk_opts, atr_opts)
+                                fast_opts, slow_opts, risk_opts, atr_opts,
+                                fee_lookup_fn)
         except Exception as e:
             print(f"\nSkipping {symbol} {interval}: {e}")
             continue
@@ -555,8 +581,24 @@ def main() -> None:
                 finally:
                     repo.close()
                 bars = build_bars(rows)
+                # fee lookup for this pair/time range
+                repo = TimescaleRepo(dsn)
+                repo.connect()
+                try:
+                    fee_rows = repo.fetch_fee_snapshots(
+                        symbol, bars[0].ts if bars else None,
+                        bars[-1].ts if bars else None)
+                finally:
+                    repo.close()
+                if fee_rows:
+                    fee_lookup = build_fee_lookup_from_rows(fee_rows)
+                    fee_lookup_fn = (
+                        lambda ts, L=fee_lookup: L.get_bps(ts, True))
+                else:
+                    fee_lookup_fn = None
                 res = eval_grid(symbol, interval, bars, strategy_list,
-                                fast_opts, slow_opts, risk_opts, atr_opts)
+                                fast_opts, slow_opts, risk_opts, atr_opts,
+                                fee_lookup_fn)
                 for r in res:
                     writer.writerow({
                         "symbol": symbol,
