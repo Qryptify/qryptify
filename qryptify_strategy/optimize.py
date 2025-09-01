@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
 from .backtest import _parse_pair
@@ -178,8 +179,74 @@ def choose_best(results: List[Result], dd_cap: float | None,
                     key=lambda r: (r.pnl - lam * r.dd, r.pnl),
                     reverse=True)
     top = scored[0]
-    # Return also top 10 frontier for inspection
+    # Return also full ranked list for inspection/export
     return top, scored
+
+
+def pareto_frontier(results: List[Result]) -> List[Result]:
+    """Compute Pareto frontier maximizing pnl and minimizing dd.
+
+    Returns results sorted by dd ascending, keeping only non-dominated points.
+    """
+    if not results:
+        return []
+    arr = sorted(results, key=lambda r: (r.dd, -r.pnl))
+    frontier: List[Result] = []
+    best_pnl = float("-inf")
+    for r in arr:
+        if r.pnl > best_pnl:
+            frontier.append(r)
+            best_pnl = r.pnl
+    return frontier
+
+
+def _build_backtest_cmd(symbol: str, interval: str, best: Result,
+                        lookback: int) -> str:
+    base = [
+        "python -m qryptify_strategy.backtest",
+        f"--pair {symbol}/{interval}",
+        f"--strategy {best.strategy}",
+        f"--lookback {lookback}",
+        f"--risk {best.risk}",
+        "--equity 10000",
+        "--atr 14",
+        f"--atr-mult {best.atr_mult}",
+        "--fee-bps 4",
+        "--slip-bps 1",
+    ]
+    # Strategy-specific args parsed from best.params
+    try:
+        parts = [
+            p.strip() for p in (best.params or "").split(",") if p.strip()
+        ]
+        kv = {}
+        for p in parts:
+            if "=" in p:
+                k, v = p.split("=", 1)
+                kv[k.strip()] = v.strip()
+        if best.strategy == "ema":
+            if "fast" in kv:
+                base.append(f"--fast {kv['fast']}")
+            if "slow" in kv:
+                base.append(f"--slow {kv['slow']}")
+        elif best.strategy == "bollinger":
+            if "period" in kv:
+                base.append(f"--bb-period {kv['period']}")
+            if "mult" in kv:
+                base.append(f"--bb-mult {kv['mult']}")
+        elif best.strategy == "rsi":
+            if "period" in kv:
+                base.append(f"--rsi-period {kv['period']}")
+            # eL -> rsi-entry, xL -> rsi-exit, ema -> rsi-ema
+            if "eL" in kv:
+                base.append(f"--rsi-entry {kv['eL']}")
+            if "xL" in kv:
+                base.append(f"--rsi-exit {kv['xL']}")
+            if "ema" in kv:
+                base.append(f"--rsi-ema {kv['ema']}")
+    except Exception:
+        pass
+    return " ".join(base)
 
 
 def main() -> None:
@@ -235,6 +302,16 @@ def main() -> None:
         default=10,
         help="How many top rows to print per pair",
     )
+    p.add_argument(
+        "--pareto-dir",
+        default="",
+        help="If set, writes Pareto frontier CSV per pair into this directory",
+    )
+    p.add_argument(
+        "--md-out",
+        default="reports/optimizer_summary.md",
+        help="Markdown summary path with per-pair bests and top-K tables",
+    )
     args = p.parse_args()
 
     pair_specs: List[Tuple[str, str]] = []
@@ -262,6 +339,7 @@ def main() -> None:
     import csv
     import os
     rows_out: List[dict] = []
+    md_lines: List[str] = ["# Optimizer Summary\n"]
 
     for symbol, interval in pair_specs:
         repo = TimescaleRepo(dsn)
@@ -294,6 +372,26 @@ def main() -> None:
             f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%}"
         )
 
+        # Markdown section for this pair
+        md_lines.append(f"\n## {symbol} {interval}\n")
+        md_lines.append(
+            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%}\n"
+        )
+        # Reproduce command
+        cmd = _build_backtest_cmd(symbol, interval, best, args.lookback)
+        md_lines.append("Reproduce:\n")
+        md_lines.append("```bash")
+        md_lines.append(cmd)
+        md_lines.append("```")
+        md_lines.append("\nTop Results\n")
+        md_lines.append(
+            "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR |\n|---|---|---:|---:|---:|---:|---:|---:|---:|"
+        )
+        for r in ranked[:max(1, args.top_k)]:
+            md_lines.append(
+                f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} |"
+            )
+
         rows_out.append({
             "symbol": symbol,
             "interval": interval,
@@ -307,6 +405,43 @@ def main() -> None:
             "equity_end": round(best.equity_end, 2),
             "cagr": round((best.cagr or 0.0) * 100, 2),
         })
+
+        # Pareto frontier per pair
+        if args.pareto_dir:
+            outdir = Path(args.pareto_dir)
+            outdir.mkdir(parents=True, exist_ok=True)
+            fname = f"pareto_{symbol}_{interval.replace('/', '_')}.csv"
+            ppath = outdir / fname
+            frontier = pareto_frontier(results)
+            with ppath.open("w", newline="") as f:
+                writer = csv.DictWriter(
+                    f,
+                    fieldnames=[
+                        "strategy",
+                        "params",
+                        "risk",
+                        "atr_mult",
+                        "pnl",
+                        "dd",
+                        "trades",
+                        "equity_end",
+                        "cagr",
+                    ],
+                )
+                writer.writeheader()
+                for r in frontier:
+                    writer.writerow({
+                        "strategy": r.strategy,
+                        "params": r.params,
+                        "risk": r.risk,
+                        "atr_mult": r.atr_mult,
+                        "pnl": round(r.pnl, 2),
+                        "dd": round(r.dd, 2),
+                        "trades": r.trades,
+                        "equity_end": round(r.equity_end, 2),
+                        "cagr": round((r.cagr or 0.0) * 100, 2),
+                    })
+            print(f"Saved Pareto frontier to {ppath}")
 
     # Write CSV
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
@@ -379,6 +514,12 @@ def main() -> None:
                         "cagr": round((r.cagr or 0.0) * 100, 2),
                     })
         print(f"Saved full grid to {args.full_out}")
+
+    # Write Markdown summary
+    md_path = Path(args.md_out)
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    md_path.write_text("\n".join(md_lines) + "\n")
+    print(f"Saved summary to {md_path}")
 
 
 if __name__ == "__main__":

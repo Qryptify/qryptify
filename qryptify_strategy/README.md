@@ -83,6 +83,15 @@ python -m qryptify_strategy.optimize --pairs BTCUSDT/1h,ETHUSDT/4h,BNBUSDT/4h \
   --risk 0.003,0.005,0.01 --atr-mult 2.0,2.5,3.0 \
   --dd-cap 3000 --lam 0.5 --top-k 10 \
   --out reports/optimizer_results.csv --full-out reports/optimizer_full_grid.csv
+
+# Single pair (BTC 1h), sweep all strategies
+python -m qryptify_strategy.optimize --pair BTCUSDT/1h \
+  --lookback 1000000 --strategies ema,bollinger,rsi \
+  --fast 10,20,30,50 --slow 50,100,200 \
+  --risk 0.003,0.005,0.01 --atr-mult 2.0,2.5,3.0 \
+  --dd-cap 3000 --lam 0.5 --top-k 10 \
+  --out reports/optimizer_results.csv \
+  --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 ```
 
 Flags:
@@ -97,8 +106,11 @@ Flags:
 - `--top-k`: How many top rows to print per pair.
 - `--out`: CSV of best config per pair (default `reports/optimizer_results.csv`).
 - `--full-out`: Optional CSV path to dump the entire grid.
+- `--pareto-dir`: If set, writes per‑pair Pareto frontier CSVs (maximize PnL, minimize DD).
+- `--md-out`: Markdown summary path with per‑pair bests and top‑K tables (default `reports/optimizer_summary.md`).
 
 Notes:
 
 - DSN is read from `qryptify_ingestor/config.yaml`. Ensure TimescaleDB has data for your pairs/intervals.
 - The report CSV columns: symbol, interval, strategy, params, risk, atr_mult, pnl, max_dd, trades, equity_end, cagr.
+- Pareto frontier CSVs contain non‑dominated points in (PnL↑, DD↓) space, sorted by DD asc.
