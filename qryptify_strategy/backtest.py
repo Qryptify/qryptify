@@ -156,7 +156,7 @@ def main() -> None:
 
         if strat_key == "ema":
             strategy = EMACrossStrategy(fast=args.fast, slow=args.slow)
-        elif strat_key in ("ema_ls", "ema2"):
+        elif strat_key == "ema_ls":
             strategy = EMACrossLongShortStrategy(fast=args.fast,
                                                  slow=args.slow)
         elif strat_key == "bollinger":
