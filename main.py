@@ -6,9 +6,10 @@ import yaml
 from qryptify_ingestor.coordinator import run_all
 
 
-def load_cfg():
+def load_cfg() -> dict:
+    """Load YAML config used by ingestor and strategy components."""
     with open("qryptify_ingestor/config.yaml", "r") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 if __name__ == "__main__":

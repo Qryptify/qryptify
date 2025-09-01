@@ -1,3 +1,8 @@
+"""Backfill utilities and runner.
+
+Backfills historical klines for configured pairs using Binance REST, writing
+idempotently into TimescaleDB and advancing the resume pointer per pair.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,17 +12,10 @@ from typing import Dict
 
 from loguru import logger
 
+from qryptify_shared.time import to_dt
+from qryptify_shared.time import to_ms
+
 from .config_utils import symbol_interval_pairs_from_cfg
-
-
-def _to_dt(ms: int) -> datetime:
-    """Convert Binance millisecond epoch to timezone-aware UTC datetime."""
-    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
-
-
-def _to_ms(dt: datetime) -> int:
-    """Convert timezone-aware datetime to millisecond epoch (UTC)."""
-    return int(dt.timestamp() * 1000)
 
 
 def _parse_kline(symbol: str, interval: str, arr: list) -> Dict:
@@ -29,7 +27,7 @@ def _parse_kline(symbol: str, interval: str, arr: list) -> Dict:
     10 taker buy quote, 11 ignore
     """
     return {
-        "ts": _to_dt(arr[0]),
+        "ts": to_dt(arr[0]),
         "symbol": symbol,
         "interval": interval,
         "open": float(arr[1]),
@@ -37,7 +35,7 @@ def _parse_kline(symbol: str, interval: str, arr: list) -> Dict:
         "low": float(arr[3]),
         "close": float(arr[4]),
         "volume": float(arr[5]),
-        "close_time": _to_dt(arr[6]),
+        "close_time": to_dt(arr[6]),
         "quote_asset_volume": float(arr[7]),
         "number_of_trades": int(arr[8]),
         "taker_buy_base": float(arr[9]),
@@ -45,58 +43,60 @@ def _parse_kline(symbol: str, interval: str, arr: list) -> Dict:
     }
 
 
-async def run_backfill(cfg: dict, repo, client):
-    """Backfill historical klines per configured (symbol, interval) pairs.
+async def run_backfill(cfg: dict, repo, client) -> None:
+    """Backfill historical klines per configured (symbol, interval) pair.
 
-    For each pair, resumes from `sync_state.last_closed_ts` if present,
-    otherwise from the configured `backfill.start_date`.
+    - Resumes from `sync_state.last_closed_ts` when present, otherwise uses
+      `backfill.start_date` from the config.
+    - Writes with ON CONFLICT DO NOTHING to remain idempotent.
     """
     pairs = symbol_interval_pairs_from_cfg(cfg)
-    limit = cfg["rest"]["klines_limit"]
+    page_limit = cfg["rest"]["klines_limit"]
     min_start = datetime.fromisoformat(cfg["backfill"]["start_date"].replace(
         "Z", "+00:00"))
 
-    for sym, itv in pairs:
-        last = repo.get_last_closed_ts(sym, itv)
-        start_dt = max_dt(min_start,
-                          (last + step_of(itv)) if last else min_start)
-        start_ms = _to_ms(start_dt)
+    for symbol, interval in pairs:
+        last = repo.get_last_closed_ts(symbol, interval)
+        start_dt = max_dt(min_start, (last + step_of(interval)) if last else min_start)
+        start_ms = to_ms(start_dt)
         logger.info(
-            f"Backfill {sym}/{itv} from {start_dt.isoformat()} (limit={limit})"
+            f"Backfill {symbol}/{interval} from {start_dt.isoformat()} (limit={page_limit})"
         )
 
         while True:
-            batch = await client.klines(sym,
-                                        itv,
+            batch = await client.klines(symbol,
+                                        interval,
                                         start_ms=start_ms,
-                                        limit=limit)
+                                        limit=page_limit)
             if not batch:
-                logger.info(f"Backfill {sym}/{itv} complete (no more data)")
+                logger.info(f"Backfill {symbol}/{interval} complete (no more data)")
                 break
-            rows = [_parse_kline(sym, itv, arr) for arr in batch]
+            rows = [_parse_kline(symbol, interval, arr) for arr in batch]
             inserted = repo.upsert_klines(rows)
             # advance by last close
             last_close_ms = batch[-1][6]
-            repo.set_last_closed_ts(sym, itv, _to_dt(last_close_ms))
+            last_close_dt = to_dt(last_close_ms)
+            repo.set_last_closed_ts(symbol, interval, last_close_dt)
             logger.info(
-                f"Backfill {sym}/{itv}: inserted={inserted} last_close={_to_dt(last_close_ms).isoformat()}"
+                f"Backfill {symbol}/{interval}: inserted={inserted} last_close={last_close_dt.isoformat()}"
             )
 
             # Stop when close to "now" (let live mode take over)
-            if (datetime.now(timezone.utc) -
-                    _to_dt(last_close_ms)) < step_of(itv):
+            if (datetime.now(timezone.utc) - last_close_dt) < step_of(interval):
                 logger.info(
-                    f"Backfill {sym}/{itv} up-to-date through {_to_dt(last_close_ms).isoformat()}"
+                    f"Backfill {symbol}/{interval} up-to-date through {last_close_dt.isoformat()}"
                 )
                 break
             start_ms = last_close_ms + 1
 
 
 def max_dt(a: datetime, b: datetime) -> datetime:
+    """Return the maximum of two datetimes."""
     return a if a >= b else b
 
 
 def step_of(interval: str) -> timedelta:
+    """Return the timedelta for a Binance kline interval string."""
     table = {
         "1m": timedelta(minutes=1),
         "3m": timedelta(minutes=3),
@@ -107,4 +107,6 @@ def step_of(interval: str) -> timedelta:
         "2h": timedelta(hours=2),
         "4h": timedelta(hours=4),
     }
+    if interval not in table:
+        raise ValueError(f"Unsupported interval: {interval}")
     return table[interval]

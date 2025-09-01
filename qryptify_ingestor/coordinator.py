@@ -12,7 +12,8 @@ from .timescale_repo import TimescaleRepo
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, max=8))
-async def run_all(cfg):
+async def run_all(cfg: dict) -> None:
+    """Orchestrate backfill then live phases with a shared repo and client."""
     client = BinanceClient(cfg["rest"]["endpoint"], cfg["ws"]["endpoint"])
     repo = TimescaleRepo(cfg["db"]["dsn"])
     repo.connect()

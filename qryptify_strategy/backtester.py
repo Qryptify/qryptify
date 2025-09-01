@@ -93,8 +93,7 @@ def _close_position(
     exit_p = exit_price
     fee_bps = _fee_bps_at(risk, exit_ts)
     fees = _apply_fees(abs(qty) * exit_p, fee_bps)
-    pnl = ((exit_p -
-            (state.entry_price or exit_p)) * qty) - fees - state.open_fees
+    pnl = ((exit_p - (state.entry_price or exit_p)) * qty) - fees - state.open_fees
     state.equity += pnl
     trade = Trade(
         entry_ts=state.entry_ts or (bars[i - 1].ts if i > 0 else bars[i].ts),
@@ -120,8 +119,7 @@ def backtest(
     if not bars:
         raise ValueError("No bars provided")
 
-    state = BacktestState(equity=risk.start_equity,
-                          max_equity=risk.start_equity)
+    state = BacktestState(equity=risk.start_equity, max_equity=risk.start_equity)
     atr_calc = WilderATR(risk.atr_period)
     trades: List[Trade] = []
     prev_close: Optional[float] = None
@@ -142,8 +140,7 @@ def backtest(
             if state.position_qty > 0:
                 state.peak_price = max(state.peak_price or bar.high, bar.high)
             else:
-                state.trough_price = min(state.trough_price or bar.low,
-                                         bar.low)
+                state.trough_price = min(state.trough_price or bar.low, bar.low)
 
             # Tighten stop with ATR trailing if configured
             if atr is not None and getattr(risk, "atr_mult_trail", 0.0) > 0:
@@ -152,18 +149,16 @@ def backtest(
                 if state.position_qty > 0 and state.peak_price is not None and state.entry_price is not None:
                     if (state.peak_price - state.entry_price) >= trigger:
                         trail_px = max(state.peak_price - trail_dist, 0.0)
-                        trail_px = _floor_price_tick(
-                            trail_px, getattr(risk, "price_tick", 0.0))
-                        state.stop_price = max(state.stop_price or 0.0,
-                                               trail_px)
+                        trail_px = _floor_price_tick(trail_px,
+                                                     getattr(risk, "price_tick", 0.0))
+                        state.stop_price = max(state.stop_price or 0.0, trail_px)
                 elif state.position_qty < 0 and state.trough_price is not None and state.entry_price is not None:
                     if (state.entry_price - state.trough_price) >= trigger:
                         trail_px = state.trough_price + trail_dist
-                        trail_px = _floor_price_tick(
-                            trail_px, getattr(risk, "price_tick", 0.0))
-                        state.stop_price = (trail_px if
-                                            state.stop_price is None else min(
-                                                state.stop_price, trail_px))
+                        trail_px = _floor_price_tick(trail_px,
+                                                     getattr(risk, "price_tick", 0.0))
+                        state.stop_price = (trail_px if state.stop_price is None else
+                                            min(state.stop_price, trail_px))
 
         exit_reason: Optional[str] = None
         exit_price: Optional[float] = None
@@ -173,31 +168,28 @@ def backtest(
                 # Long stop
                 if bar.open <= stop_px:
                     exit_reason = "stop_gap"
-                    exit_price = _price_with_slippage(bar.open,
-                                                      risk.slippage_bps,
+                    exit_price = _price_with_slippage(bar.open, risk.slippage_bps,
                                                       "SELL")
                 elif bar.low <= stop_px:
                     exit_reason = "stop"
-                    exit_price = _price_with_slippage(stop_px,
-                                                      risk.slippage_bps,
+                    exit_price = _price_with_slippage(stop_px, risk.slippage_bps,
                                                       "SELL")
             else:
                 # Short stop
                 if bar.open >= stop_px:
                     exit_reason = "stop_gap"
-                    exit_price = _price_with_slippage(bar.open,
-                                                      risk.slippage_bps, "BUY")
+                    exit_price = _price_with_slippage(bar.open, risk.slippage_bps,
+                                                      "BUY")
                 elif bar.high >= stop_px:
                     exit_reason = "stop"
-                    exit_price = _price_with_slippage(stop_px,
-                                                      risk.slippage_bps, "BUY")
+                    exit_price = _price_with_slippage(stop_px, risk.slippage_bps, "BUY")
 
         next_open_price = bars[i + 1].open if (i + 1) < len(bars) else None
 
         if exit_reason and state.position_qty != 0:
             trades.append(
-                _close_position(state, bars, i, bar.ts,
-                                (exit_price or bar.close), risk, exit_reason))
+                _close_position(state, bars, i, bar.ts, (exit_price or bar.close), risk,
+                                exit_reason))
 
         if next_open_price is not None and sig is not None:
             desired = max(min(int(sig.target), 1), -1)
@@ -209,14 +201,13 @@ def backtest(
                     next_open_price, risk.slippage_bps,
                     "SELL" if state.position_qty > 0 else "BUY")
                 trades.append(
-                    _close_position(state, bars, i, bars[i + 1].ts, px_exit,
-                                    risk, sig.reason or "signal_exit"))
+                    _close_position(state, bars, i, bars[i + 1].ts, px_exit, risk,
+                                    sig.reason or "signal_exit"))
 
             # Then, enter if desired is non-flat and we are currently flat
             if desired != 0 and state.position_qty == 0 and atr is not None:
-                px_entry = _price_with_slippage(
-                    next_open_price, risk.slippage_bps,
-                    "BUY" if desired > 0 else "SELL")
+                px_entry = _price_with_slippage(next_open_price, risk.slippage_bps,
+                                                "BUY" if desired > 0 else "SELL")
                 risk_cash = state.equity * risk.risk_per_trade
                 stop_dist = atr * risk.atr_mult_stop
                 if stop_dist <= 0:
@@ -226,8 +217,7 @@ def backtest(
                 qty = _floor_to_step(qty, getattr(risk, "qty_step", 0.0))
                 min_qty = getattr(risk, "min_qty", 0.0) or 0.0
                 min_notional = getattr(risk, "min_notional", 0.0) or 0.0
-                if qty <= 0 or qty < min_qty or (qty *
-                                                 px_entry) < min_notional:
+                if qty <= 0 or qty < min_qty or (qty * px_entry) < min_notional:
                     prev_close = bar.close
                     continue
                 fee_bps_entry = _fee_bps_at(risk, bars[i + 1].ts)
@@ -240,8 +230,7 @@ def backtest(
                     stop_px = max(px_entry - stop_dist, 0.0)
                 else:
                     stop_px = px_entry + stop_dist
-                stop_px = _floor_price_tick(stop_px,
-                                            getattr(risk, "price_tick", 0.0))
+                stop_px = _floor_price_tick(stop_px, getattr(risk, "price_tick", 0.0))
                 state.stop_price = stop_px
                 # Initialize extremes for trailing
                 state.peak_price = px_entry if desired > 0 else None
@@ -264,8 +253,7 @@ def backtest(
         px = _price_with_slippage(last_bar.close, risk.slippage_bps, side)
         trades.append(
             _close_position(state, bars,
-                            len(bars) - 1, last_bar.ts, px, risk,
-                            "final_close"))
+                            len(bars) - 1, last_bar.ts, px, risk, "final_close"))
 
     wins = [t for t in trades if t.pnl > 0]
     losses = [t for t in trades if t.pnl <= 0]
@@ -282,8 +270,7 @@ def backtest(
 
     span_sec = max((bars[-1].ts - bars[0].ts).total_seconds(), 1.0)
     years = span_sec / (365.25 * 24 * 3600)
-    cagr = (state.equity /
-            risk.start_equity)**(1 / years) - 1 if years > 0 else None
+    cagr = (state.equity / risk.start_equity)**(1 / years) - 1 if years > 0 else None
 
     peak = equity_series[0] if equity_series else risk.start_equity
     max_dd = 0.0
@@ -308,8 +295,7 @@ def backtest(
         avg_loss=avg_loss,
         cagr=cagr,
         avg_fee_bps=avg_fee_bps,
-        fee_model=("dynamic_db"
-                   if getattr(risk, "fee_lookup", None) else "fixed_bps"),
+        fee_model=("dynamic_db" if getattr(risk, "fee_lookup", None) else "fixed_bps"),
     )
     strategy.on_finish()
     return rpt, trades

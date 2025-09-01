@@ -10,6 +10,12 @@ pip install "psycopg[binary]" pyyaml loguru
 
 Python ≥ 3.10 recommended. Data is read from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
 
+Tip: snapshot exchange fees first for realistic results:
+
+```bash
+python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
+```
+
 ## Strategies (two‑sided)
 
 - EMA crossover: long on fast>slow cross, short on fast<slow cross (`ema`).

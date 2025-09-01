@@ -3,6 +3,30 @@ from __future__ import annotations
 from typing import List, Tuple
 
 
+def parse_pair(pair: str) -> tuple[str, str]:
+    """Parse a single pair string into (SYMBOL, interval).
+
+    Accepts formats like "SYMBOL/interval" or "SYMBOL-interval".
+    Returns uppercased symbol and raw interval string.
+    Raises ValueError for invalid inputs.
+    """
+    s = str(pair or "").strip()
+    if not s:
+        raise ValueError("pair cannot be empty")
+    if "/" in s:
+        sym, itv = s.split("/", 1)
+    elif "-" in s:
+        sym, itv = s.split("-", 1)
+    else:
+        raise ValueError(
+            f"Invalid pair format '{s}'. Use SYMBOL/interval or SYMBOL-interval.")
+    sym = sym.strip().upper()
+    itv = itv.strip()
+    if not sym or not itv:
+        raise ValueError(f"Invalid pair format '{pair}'. Missing symbol or interval.")
+    return sym, itv
+
+
 def symbol_interval_pairs_from_cfg(cfg) -> List[Tuple[str, str]]:
     """Return list of (symbol, interval) pairs from cfg['pairs'] only.
 
@@ -13,22 +37,12 @@ def symbol_interval_pairs_from_cfg(cfg) -> List[Tuple[str, str]]:
     """
     pairs = cfg.get("pairs")
     if not pairs:
-        raise ValueError(
-            "config.yaml must define 'pairs' with symbol-interval entries")
+        raise ValueError("config.yaml must define 'pairs' with symbol-interval entries")
 
     out: list[tuple[str, str]] = []
     for item in pairs:
         if isinstance(item, str):
-            s = item.strip()
-            if "/" in s:
-                sym, itv = s.split("/", 1)
-            elif "-" in s:
-                sym, itv = s.split("-", 1)
-            else:
-                raise ValueError(
-                    f"Invalid pair format '{s}'. Use SYMBOL/interval or SYMBOL-interval."
-                )
-            out.append((sym.strip().upper(), itv.strip()))
+            out.append(parse_pair(item))
         elif isinstance(item, dict):
             sym = str(item.get("symbol", "")).strip().upper()
             itv = str(item.get("interval", "")).strip()
@@ -39,8 +53,7 @@ def symbol_interval_pairs_from_cfg(cfg) -> List[Tuple[str, str]]:
             out.append((sym, itv))
         else:
             raise ValueError(
-                f"Invalid pair entry type {type(item)}; expected str or {dict}"
-            )
+                f"Invalid pair entry type {type(item)}; expected str or {dict}")
     # de-duplicate while preserving order
     seen = set()
     uniq: list[tuple[str, str]] = []

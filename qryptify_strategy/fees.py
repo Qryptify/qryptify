@@ -15,9 +15,7 @@ def binance_futures_fee_bps(symbol: str) -> Tuple[float, float]:
 
     Returns (maker_bps, taker_bps). Falls back to (2.0, 4.0) on error.
     """
-    url = (
-        f"https://fapi.binance.com/fapi/v1/commissionRate?symbol={symbol.upper()}"
-    )
+    url = (f"https://fapi.binance.com/fapi/v1/commissionRate?symbol={symbol.upper()}")
     try:
         with urlopen(url, timeout=10) as resp:  # nosec B310 - public API URL
             data = json.loads(resp.read().decode())

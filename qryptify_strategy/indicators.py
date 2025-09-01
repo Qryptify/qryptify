@@ -56,10 +56,8 @@ class WilderRSI:
             self._avg_loss = self._sum_loss / float(self.period)
         else:
             # Wilder smoothing
-            self._avg_gain = (self._avg_gain *
-                              (self.period - 1) + gain) / self.period
-            self._avg_loss = (self._avg_loss *
-                              (self.period - 1) + loss) / self.period
+            self._avg_gain = (self._avg_gain * (self.period - 1) + gain) / self.period
+            self._avg_loss = (self._avg_loss * (self.period - 1) + loss) / self.period
 
         # Compute RSI from averages
         if self._avg_loss == 0.0 and self._avg_gain == 0.0:

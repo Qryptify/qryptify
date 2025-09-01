@@ -21,6 +21,8 @@ docker compose up -d
 ```
 
 The `sql/001_init.sql` initializes the hypertable (`candlesticks`) and resume table (`sync_state`), with compression policies.
+`sql/003_fees.sql` defines `exchange_fees` used by the strategy/optimizer; the
+snapshot script can also create it if missing.
 
 ## Install
 
@@ -64,7 +66,8 @@ Flow
 
 - Backfills from the later of `backfill.start_date` or the last saved close per pair
 - Switches to live streaming and appends new closed candles
-- Ctrl+C to stop; resume pointers are saved in `sync_state`
+- Ctrl+C to stop; resume pointers are saved in `sync_state`. A benign
+  `KeyboardInterrupt` trace from the WebSocket close may appear.
 
 ## Verify
 

@@ -26,6 +26,12 @@ python main.py
 ./verify_ingestion.sh
 ```
 
+Pair formats supported in config:
+
+- `SYMBOL/interval` (e.g., `BTCUSDT/1h`)
+- `SYMBOL-interval` (e.g., `ETHUSDT-4h`)
+- YAML objects `{symbol: SYMBOL, interval: INTERVAL}`
+
 ## Backtest (two‑sided)
 
 Examples (reads DSN from `qryptify_ingestor/config.yaml`):
@@ -76,13 +82,36 @@ Outputs under `reports/`:
 - Pareto CSVs per pair (maximize PnL, minimize DD)
 - Markdown summary with a Reproduce command per pair
 
+Fee snapshots (optional, recommended for realistic backtests):
+
+```bash
+python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
+```
+
+This stores maker/taker fee bps by symbol in `exchange_fees` and the
+backtester/optimizer apply them dynamically per trade timestamp. If no
+snapshots are present, they fall back to a constant `--fee-bps`.
+
 ## Repo Map
 
 - `qryptify_ingestor/` — Binance client, backfill/live runners, Timescale repo
 - `qryptify_strategy/` — backtester, strategies, optimizer
-- `sql/` — Timescale schema (`001_init.sql`) and strategy tables (`002_strategy.sql`)
+- `sql/` — Timescale schema (`001_init.sql`), strategy tables (`002_strategy.sql`), and exchange fees (`003_fees.sql`)
 
 ## Notes
 
 - Keep `qryptify_ingestor/config.yaml` updated; both ingestor and strategy use its DSN.
 - Use `./verify_ingestion.sh` to validate DB health and candle coverage.
+
+## Dev & Formatting
+
+This repo uses pre-commit with isort (google profile), YAPF, and Prettier.
+
+```bash
+pip install pre-commit
+pre-commit install
+# Format/lint everything
+pre-commit run -a
+```
+
+If a hook modifies a file, run it again until it passes.
