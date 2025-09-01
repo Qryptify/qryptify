@@ -35,6 +35,10 @@ class RiskParams:
     min_qty: float = 0.0  # enforce minimum order quantity
     min_notional: float = 0.0  # enforce minimum notional (qty*price)
     price_tick: float = 0.0  # round stop/limit prices to this tick
+    # Optional ATR trailing stop multiplier (>0 enables trailing)
+    atr_mult_trail: float = 0.0
+    # Optional MFE trigger before trailing activates (in ATRs)
+    atr_trail_trigger_mult: float = 0.0
 
 
 @dataclass
