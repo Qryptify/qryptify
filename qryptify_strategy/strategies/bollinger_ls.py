@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from ..indicators import RollingMeanStd
 from ..models import Bar
 from ..models import Signal
 from ..strategy_base import Strategy
+from ..strategy_utils import BollingerCore
 
 
 @dataclass
@@ -24,63 +24,20 @@ class BollingerLongShortStrategy(Strategy):
     id: str = "bollinger_ls"
 
     def __post_init__(self) -> None:
-        if self.period <= 1:
-            raise ValueError("period must be > 1")
-        if self.mult <= 0:
-            raise ValueError("mult must be > 0")
-        self._roll = RollingMeanStd(self.period)
-        self._prev_close: Optional[float] = None
-        self._prev_lower: Optional[float] = None
-        self._prev_mid: Optional[float] = None
-        self._prev_upper: Optional[float] = None
+        self._core = BollingerCore(self.period, self.mult)
 
     def on_start(self) -> None:
-        self._roll.reset()
-        self._prev_close = None
-        self._prev_lower = None
-        self._prev_mid = None
-        self._prev_upper = None
-
-    def _current_bands(self,
-                       close: float) -> Optional[tuple[float, float, float]]:
-        stats = self._roll.update(close)
-        if stats is None:
-            return None
-        mean, std = stats
-        upper = mean + self.mult * std
-        lower = mean - self.mult * std
-        return lower, mean, upper
+        self._core.reset()
 
     def on_bar(self, i: int, bar: Bar) -> Optional[Signal]:
         signal: Optional[Signal] = None
-
-        if (self._prev_close is not None and self._prev_mid is not None
-                and self._prev_upper is not None
-                and self._prev_lower is not None):
-            crossed_up_upper = self._prev_close <= self._prev_upper and bar.close > self._prev_upper
-            crossed_down_lower = self._prev_close >= self._prev_lower and bar.close < self._prev_lower
-            crossed_below_mid = self._prev_close >= self._prev_mid and bar.close < self._prev_mid
-            crossed_above_mid = self._prev_close <= self._prev_mid and bar.close > self._prev_mid
-
-            if crossed_below_mid:
-                signal = Signal(target=0, reason="bb_long_exit")
-            elif crossed_above_mid:
-                signal = Signal(target=0, reason="bb_short_exit")
-            elif crossed_up_upper:
-                signal = Signal(target=+1, reason="bb_breakout_up")
-            elif crossed_down_lower:
-                signal = Signal(target=-1, reason="bb_breakout_down")
-
-        bands = self._current_bands(bar.close)
-        if bands is not None:
-            lower, mid, upper = bands
-            self._prev_lower = lower
-            self._prev_mid = mid
-            self._prev_upper = upper
-        else:
-            self._prev_lower = None
-            self._prev_mid = None
-            self._prev_upper = None
-
-        self._prev_close = bar.close
+        events, _ = self._core.update_and_events(bar.close)
+        if events.get("cross_below_mid"):
+            signal = Signal(target=0, reason="bb_long_exit")
+        elif events.get("cross_above_mid"):
+            signal = Signal(target=0, reason="bb_short_exit")
+        elif events.get("cross_up_upper"):
+            signal = Signal(target=+1, reason="bb_breakout_up")
+        elif events.get("cross_down_lower"):
+            signal = Signal(target=-1, reason="bb_breakout_down")
         return signal
