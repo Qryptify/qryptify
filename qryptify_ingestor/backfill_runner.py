@@ -102,7 +102,9 @@ def step_of(interval: str) -> timedelta:
         "3m": timedelta(minutes=3),
         "5m": timedelta(minutes=5),
         "15m": timedelta(minutes=15),
+        "30m": timedelta(minutes=30),
         "1h": timedelta(hours=1),
+        "2h": timedelta(hours=2),
         "4h": timedelta(hours=4),
     }
     return table[interval]
