@@ -12,7 +12,7 @@ from qryptify_ingestor.config_utils import parse_pair
 from .backtest import build_bars
 from .backtest import load_cfg_dsn
 from .backtester import backtest
-from .fees import build_fee_lookup_from_rows
+from .fees import binance_futures_fee_bps
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
@@ -52,11 +52,9 @@ def eval_grid(
     slow_opts: Iterable[int],
     risk_opts: Iterable[float],
     atr_opts: Iterable[float],
-    fee_lookup_fn,
+    fee_bps_val: float,
 ) -> List[Result]:
     out: List[Result] = []
-    is_dyn = fee_lookup_fn is not None
-    fee_bps_val = 0.0 if is_dyn else 4.0
     for risk in risk_opts:
         for atr_mult in atr_opts:
             # EMA long/short
@@ -77,7 +75,7 @@ def eval_grid(
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
                                 fee_bps=fee_bps_val,
-                                fee_lookup=fee_lookup_fn if is_dyn else None,
+                                fee_lookup=None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -112,7 +110,7 @@ def eval_grid(
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
                                 fee_bps=fee_bps_val,
-                                fee_lookup=fee_lookup_fn if is_dyn else None,
+                                fee_lookup=None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -154,7 +152,7 @@ def eval_grid(
                                         atr_period=14,
                                         atr_mult_stop=atr_mult,
                                         fee_bps=fee_bps_val,
-                                        fee_lookup=fee_lookup_fn if is_dyn else None,
+                                        fee_lookup=None,
                                         slippage_bps=1.0,
                                     ),
                                 )
@@ -222,6 +220,9 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result, lookback: int)
         f"--atr-mult {best.atr_mult}",
         "--slip-bps 1",
     ]
+    # Pin the fee bps used during optimization for reproducibility
+    if best.avg_fee_bps is not None:
+        base.append(f"--fee-bps {best.avg_fee_bps}")
     # Strategy-specific args parsed from best.params
     try:
         parts = [p.strip() for p in (best.params or "").split(",") if p.strip()]
@@ -409,24 +410,16 @@ def main() -> None:
             repo.close()
         bars = build_bars(rows)
 
-        # Build fee lookup over the backtest time range (taker fees by default)
-        if bars:
-            from qryptify_ingestor.timescale_repo import TimescaleRepo  # type: ignore
-            repo = TimescaleRepo(dsn)
-            repo.connect()
-            try:
-                fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts, bars[-1].ts)
-            finally:
-                repo.close()
-            fee_lookup = build_fee_lookup_from_rows(fee_rows)
-            fee_lookup_fn = (
-                lambda ts, L=fee_lookup: L.get_bps(ts, True)) if fee_rows else None
-        else:
-            fee_lookup_fn = None
+        # Resolve fixed taker fee bps for this symbol via API (fallback 4.0 bps)
+        try:
+            _, taker_bps = binance_futures_fee_bps(symbol)
+            fee_bps_val = float(taker_bps)
+        except Exception:
+            fee_bps_val = 4.0
 
         try:
             results = eval_grid(symbol, interval, bars, strategy_list, fast_opts,
-                                slow_opts, risk_opts, atr_opts, fee_lookup_fn)
+                                slow_opts, risk_opts, atr_opts, fee_bps_val)
         except Exception as e:
             print(f"\nSkipping {symbol} {interval}: {e}")
             continue
@@ -450,9 +443,8 @@ def main() -> None:
 
         # Markdown section for this pair
         md_lines.append(f"\n## {symbol} {interval}\n")
-        fees_mode = "dynamic_db" if fee_lookup_fn else "fixed_bps"
         md_lines.append(
-            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%} | avg_fee_bps={(best.avg_fee_bps or 0.0):.2f} | fees={fees_mode}\n"
+            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%} | avg_fee_bps={(best.avg_fee_bps or 0.0):.2f}\n"
         )
         # Reproduce command
         cmd = _build_backtest_cmd(symbol, interval, best, args.lookback)
@@ -576,22 +568,14 @@ def main() -> None:
                 finally:
                     repo.close()
                 bars = build_bars(rows)
-                # fee lookup for this pair/time range
-                repo = TimescaleRepo(dsn)
-                repo.connect()
+                # Resolve fixed taker fee bps via API for this symbol
                 try:
-                    fee_rows = repo.fetch_fee_snapshots(symbol,
-                                                        bars[0].ts if bars else None,
-                                                        bars[-1].ts if bars else None)
-                finally:
-                    repo.close()
-                if fee_rows:
-                    fee_lookup = build_fee_lookup_from_rows(fee_rows)
-                    fee_lookup_fn = (lambda ts, L=fee_lookup: L.get_bps(ts, True))
-                else:
-                    fee_lookup_fn = None
+                    _, taker_bps = binance_futures_fee_bps(symbol)
+                    fee_bps_val = float(taker_bps)
+                except Exception:
+                    fee_bps_val = 4.0
                 res = eval_grid(symbol, interval, bars, strategy_list, fast_opts,
-                                slow_opts, risk_opts, atr_opts, fee_lookup_fn)
+                                slow_opts, risk_opts, atr_opts, fee_bps_val)
                 for r in res:
                     writer.writerow({
                         "symbol": symbol,

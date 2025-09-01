@@ -51,7 +51,7 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookbac
 ```
 
 Key flags: `--pair`, `--strategy (ema|bollinger|rsi)`, `--lookback | --start/--end`, risk (`--equity --risk --atr --atr-mult --slip-bps`) and per‑strategy params.
-Fees are dynamic by default (from DB snapshots); `--fee-bps` is a fallback when no snapshots exist.
+Fees default to the current Binance API taker bps per symbol at run time (fallback 4.0 bps or override via `--fee-bps`).
 
 Execution: signals on close; fills at next open (slippage). Stops can gap. ATR sizing; orders respect step/minNotional/tick.
 
@@ -82,21 +82,15 @@ Outputs under `reports/`:
 - Pareto CSVs per pair (maximize PnL, minimize DD)
 - Markdown summary with a Reproduce command per pair
 
-Fee snapshots (optional, recommended for realistic backtests):
+Fee snapshots (optional if you want time‑varying fees):
 
-```bash
-python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
-```
-
-This stores maker/taker fee bps by symbol in `exchange_fees` and the
-backtester/optimizer apply them dynamically per trade timestamp. If no
-snapshots are present, they fall back to a constant `--fee-bps`.
+This repo no longer includes fee snapshot tooling or schema; strategy tools use API bps by default.
 
 ## Repo Map
 
 - `qryptify_ingestor/` — Binance client, backfill/live runners, Timescale repo
 - `qryptify_strategy/` — backtester, strategies, optimizer
-- `sql/` — Timescale schema (`001_init.sql`), strategy tables (`002_strategy.sql`), and exchange fees (`003_fees.sql`)
+- `sql/` — Timescale schema (`001_init.sql`) and strategy tables (`002_strategy.sql`)
 
 ## Notes
 
