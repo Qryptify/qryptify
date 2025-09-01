@@ -21,6 +21,8 @@ docker compose up -d
 ```
 
 The `sql/001_init.sql` initializes the hypertable (`candlesticks`) and resume table (`sync_state`), with compression policies.
+`sql/003_fees.sql` defines `exchange_fees` used by the strategy/optimizer; the
+snapshot script can also create it if missing.
 
 ## Install
 
@@ -64,7 +66,8 @@ Flow
 
 - Backfills from the later of `backfill.start_date` or the last saved close per pair
 - Switches to live streaming and appends new closed candles
-- Ctrl+C to stop; resume pointers are saved in `sync_state`
+- Ctrl+C to stop; resume pointers are saved in `sync_state`. A benign
+  `KeyboardInterrupt` trace from the WebSocket close may appear.
 
 ## Verify
 
@@ -99,7 +102,20 @@ Conventions: `symbol` uppercased; OHLCV stored as DOUBLE PRECISION for speed.
 - `timescale_repo.py`: thin, explicit Timescale access (connect/close, upsert, fetch, resume)
 - `coordinator.py`: orchestrates backfill then live; has retry on transient errors
 
+## Fee snapshots
+
+Strategy backtests and optimizer can apply time‑varying exchange fees from the DB.
+
+Insert a snapshot (maker/taker bps per symbol) for all pairs configured in your YAML:
+
+```bash
+python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
+```
+
+This writes to `exchange_fees(symbol, ts, maker_bps, taker_bps, source, note)`.
+Snapshots are sparse and only created when you run the script; schedule it periodically if your account tier changes.
+
 ## Using with qryptify_strategy
 
-- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV
+- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV and fee snapshots
 - You can pass the same YAML into the optimizer’s `--config` to iterate pairs/strategies and export results

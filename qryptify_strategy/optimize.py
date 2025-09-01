@@ -7,7 +7,8 @@ from typing import Iterable, List, Optional, Tuple
 
 import yaml
 
-from .backtest import _parse_pair
+from qryptify_ingestor.config_utils import parse_pair
+
 from .backtest import build_bars
 from .backtest import load_cfg_dsn
 from .backtester import backtest
@@ -29,7 +30,7 @@ class Result:
     trades: int
     cagr: Optional[float]
     equity_end: float
-    fee_bps: float = 0.0
+    avg_fee_bps: Optional[float] = None
     # optional per-strategy fields for debugging
     fast: Optional[int] = None
     slow: Optional[int] = None
@@ -54,7 +55,8 @@ def eval_grid(
     fee_lookup_fn,
 ) -> List[Result]:
     out: List[Result] = []
-    # fee_lookup_fn will be attached via RiskParams by caller
+    is_dyn = fee_lookup_fn is not None
+    fee_bps_val = 0.0 if is_dyn else 4.0
     for risk in risk_opts:
         for atr_mult in atr_opts:
             # EMA long/short
@@ -74,9 +76,8 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=
-                                0.0,  # dynamic via fee_lookup if provided by caller
-                                fee_lookup=fee_lookup_fn,
+                                fee_bps=fee_bps_val,
+                                fee_lookup=fee_lookup_fn if is_dyn else None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -91,7 +92,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
-                                fee_bps=0.0,
+                                avg_fee_bps=rpt.avg_fee_bps,
                                 fast=fast,
                                 slow=slow,
                             ))
@@ -99,8 +100,7 @@ def eval_grid(
             if "bollinger" in strategies:
                 for bb_period in [20, 50]:
                     for bb_mult in [2.0, 2.5, 3.0]:
-                        strat = BollingerBandStrategy(period=bb_period,
-                                                      mult=bb_mult)
+                        strat = BollingerBandStrategy(period=bb_period, mult=bb_mult)
                         rpt, _ = backtest(
                             symbol,
                             interval,
@@ -111,8 +111,8 @@ def eval_grid(
                                 risk_per_trade=risk,
                                 atr_period=14,
                                 atr_mult_stop=atr_mult,
-                                fee_bps=0.0,
-                                fee_lookup=fee_lookup_fn,
+                                fee_bps=fee_bps_val,
+                                fee_lookup=fee_lookup_fn if is_dyn else None,
                                 slippage_bps=1.0,
                             ),
                         )
@@ -127,7 +127,7 @@ def eval_grid(
                                 trades=rpt.trades,
                                 cagr=rpt.cagr,
                                 equity_end=rpt.equity_end,
-                                fee_bps=0.0,
+                                avg_fee_bps=rpt.avg_fee_bps,
                                 bb_period=bb_period,
                                 bb_mult=bb_mult,
                             ))
@@ -153,8 +153,8 @@ def eval_grid(
                                         risk_per_trade=risk,
                                         atr_period=14,
                                         atr_mult_stop=atr_mult,
-                                        fee_bps=0.0,
-                                        fee_lookup=fee_lookup_fn,
+                                        fee_bps=fee_bps_val,
+                                        fee_lookup=fee_lookup_fn if is_dyn else None,
                                         slippage_bps=1.0,
                                     ),
                                 )
@@ -163,7 +163,7 @@ def eval_grid(
                                         strategy="rsi",
                                         params=
                                         (f"period={rsi_period},eL={entry_low},xL={exit_low},ema={ema_filter}"
-                                         ),
+                                        ),
                                         risk=risk,
                                         atr_mult=atr_mult,
                                         pnl=rpt.total_pnl,
@@ -171,7 +171,7 @@ def eval_grid(
                                         trades=rpt.trades,
                                         cagr=rpt.cagr,
                                         equity_end=rpt.equity_end,
-                                        fee_bps=0.0,
+                                        avg_fee_bps=rpt.avg_fee_bps,
                                         rsi_period=rsi_period,
                                         entry_low=entry_low,
                                         exit_low=exit_low,
@@ -187,9 +187,7 @@ def choose_best(results: List[Result], dd_cap: float | None,
         # If nothing passes, pick best score without cap
         filt = results
     # Score: pnl - lam * dd
-    scored = sorted(filt,
-                    key=lambda r: (r.pnl - lam * r.dd, r.pnl),
-                    reverse=True)
+    scored = sorted(filt, key=lambda r: (r.pnl - lam * r.dd, r.pnl), reverse=True)
     top = scored[0]
     # Return also full ranked list for inspection/export
     return top, scored
@@ -212,8 +210,7 @@ def pareto_frontier(results: List[Result]) -> List[Result]:
     return frontier
 
 
-def _build_backtest_cmd(symbol: str, interval: str, best: Result,
-                        lookback: int) -> str:
+def _build_backtest_cmd(symbol: str, interval: str, best: Result, lookback: int) -> str:
     base = [
         "python -m qryptify_strategy.backtest",
         f"--pair {symbol}/{interval}",
@@ -227,9 +224,7 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result,
     ]
     # Strategy-specific args parsed from best.params
     try:
-        parts = [
-            p.strip() for p in (best.params or "").split(",") if p.strip()
-        ]
+        parts = [p.strip() for p in (best.params or "").split(",") if p.strip()]
         kv = {}
         for p in parts:
             if "=" in p:
@@ -263,13 +258,10 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result,
 def main() -> None:
     p = argparse.ArgumentParser(description="Parameter sweep optimizer")
     p.add_argument("--pair", help="SYMBOL/interval, e.g., BTCUSDT/1h (single)")
-    p.add_argument("--config",
-                   default="",
-                   help="YAML with pairs/strategies/grids")
+    p.add_argument("--config", default="", help="YAML with pairs/strategies/grids")
     p.add_argument(
         "--pairs",
-        help=
-        "Comma-separated list of pairs (SYMBOL/interval). If set, overrides --pair",
+        help="Comma-separated list of pairs (SYMBOL/interval). If set, overrides --pair",
     )
     p.add_argument("--lookback", type=int, default=1000000)
     p.add_argument("--strategies",
@@ -296,10 +288,7 @@ def main() -> None:
                    type=float,
                    default=3000.0,
                    help="Max drawdown cap (quote currency), 0 to disable")
-    p.add_argument("--lam",
-                   type=float,
-                   default=0.5,
-                   help="Score lambda: pnl - lam*dd")
+    p.add_argument("--lam", type=float, default=0.5, help="Score lambda: pnl - lam*dd")
     p.add_argument(
         "--out",
         default="reports/optimizer_results.csv",
@@ -341,25 +330,31 @@ def main() -> None:
             item = item.strip()
             if not item:
                 continue
-            pair_specs.append(_parse_pair(item))
+            pair_specs.append(parse_pair(item))
     elif args.pair:
-        pair_specs.append(_parse_pair(args.pair))
+        pair_specs.append(parse_pair(args.pair))
     else:
         cfg_pairs = cfg.get("pairs") or []
         if not cfg_pairs:
-            raise SystemExit(
-                "Provide --pair/--pairs or --config with pairs list")
+            raise SystemExit("Provide --pair/--pairs or --config with pairs list")
         for item in cfg_pairs:
-            pair_specs.append(_parse_pair(str(item)))
+            s = None
+            if isinstance(item, dict):
+                sym = str(item.get("symbol", "")).strip()
+                ivl = str(item.get("interval", "")).strip()
+                if sym and ivl:
+                    s = f"{sym}/{ivl}"
+            if s is None:
+                s = str(item)
+            pair_specs.append(parse_pair(s))
 
     # Resolve strategies
     if args.strategies:
         strategy_list = [s.strip() for s in args.strategies.split(",") if s]
     else:
         cfg_strats = cfg.get("strategies") or []
-        strategy_list = (
-            [str(s).strip() for s in cfg_strats
-             if str(s).strip()] if cfg_strats else ["ema", "bollinger", "rsi"])
+        strategy_list = ([str(s).strip() for s in cfg_strats if str(s).strip()]
+                         if cfg_strats else ["ema", "bollinger", "rsi"])
 
     # Grids from CLI with config overrides
     def cfg_list(name: str, arg_vals: List[str]) -> List[str]:
@@ -371,16 +366,13 @@ def main() -> None:
         return arg_vals
 
     fast_opts = [
-        int(x)
-        for x in cfg_list("fast", [x for x in args.fast.split(",") if x])
+        int(x) for x in cfg_list("fast", [x for x in args.fast.split(",") if x])
     ]
     slow_opts = [
-        int(x)
-        for x in cfg_list("slow", [x for x in args.slow.split(",") if x])
+        int(x) for x in cfg_list("slow", [x for x in args.slow.split(",") if x])
     ]
     risk_opts = [
-        float(x)
-        for x in cfg_list("risk", [x for x in args.risk.split(",") if x])
+        float(x) for x in cfg_list("risk", [x for x in args.risk.split(",") if x])
     ]
     atr_opts = [
         float(x) for x in cfg_list(
@@ -423,26 +415,23 @@ def main() -> None:
             repo = TimescaleRepo(dsn)
             repo.connect()
             try:
-                fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts,
-                                                    bars[-1].ts)
+                fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts, bars[-1].ts)
             finally:
                 repo.close()
             fee_lookup = build_fee_lookup_from_rows(fee_rows)
-            fee_lookup_fn = (lambda ts, L=fee_lookup: L.get_bps(ts, True)
-                             ) if fee_rows else None
+            fee_lookup_fn = (
+                lambda ts, L=fee_lookup: L.get_bps(ts, True)) if fee_rows else None
         else:
             fee_lookup_fn = None
 
         try:
-            results = eval_grid(symbol, interval, bars, strategy_list,
-                                fast_opts, slow_opts, risk_opts, atr_opts,
-                                fee_lookup_fn)
+            results = eval_grid(symbol, interval, bars, strategy_list, fast_opts,
+                                slow_opts, risk_opts, atr_opts, fee_lookup_fn)
         except Exception as e:
             print(f"\nSkipping {symbol} {interval}: {e}")
             continue
         if not results:
-            print(
-                f"\nNo results for {symbol} {interval} (check data or grids)")
+            print(f"\nNo results for {symbol} {interval} (check data or grids)")
             continue
         best, ranked = choose_best(results, dd_cap, lam)
 
@@ -451,18 +440,19 @@ def main() -> None:
         for r in ranked[:max(1, top_k)]:
             print(
                 f"  strat={r.strategy} params={r.params} risk={r.risk} atr={r.atr_mult} "
-                f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%}"
+                f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%} avg_fee_bps={(r.avg_fee_bps or 0.0):.2f}"
             )
         print("Recommended:")
         print(
             f"  strat={best.strategy} params={best.params} risk={best.risk} atr={best.atr_mult} "
-            f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%}"
+            f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%} avg_fee_bps={(best.avg_fee_bps or 0.0):.2f}"
         )
 
         # Markdown section for this pair
         md_lines.append(f"\n## {symbol} {interval}\n")
+        fees_mode = "dynamic_db" if fee_lookup_fn else "fixed_bps"
         md_lines.append(
-            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%}\n"
+            f"Best (score=pnl-lam*dd): {best.strategy} | {best.params} | risk={best.risk} | atr={best.atr_mult} | pnl={best.pnl:.2f} | dd={best.dd:.0f} | trades={best.trades} | eq={best.equity_end:.2f} | cagr={(best.cagr or 0.0):.2%} | avg_fee_bps={(best.avg_fee_bps or 0.0):.2f} | fees={fees_mode}\n"
         )
         # Reproduce command
         cmd = _build_backtest_cmd(symbol, interval, best, args.lookback)
@@ -472,11 +462,11 @@ def main() -> None:
         md_lines.append("```")
         md_lines.append("\nTop Results\n")
         md_lines.append(
-            "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR |\n|---|---|---:|---:|---:|---:|---:|---:|---:|"
+            "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR | Fee(bps) |\n|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"
         )
         for r in ranked[:max(1, top_k)]:
             md_lines.append(
-                f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} |"
+                f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} | {(r.avg_fee_bps or 0.0):.2f} |"
             )
 
         rows_out.append({
@@ -491,6 +481,7 @@ def main() -> None:
             "trades": best.trades,
             "equity_end": round(best.equity_end, 2),
             "cagr": round((best.cagr or 0.0) * 100, 2),
+            "avg_fee_bps": round((best.avg_fee_bps or 0.0), 4),
         })
 
         # Pareto frontier per pair
@@ -513,6 +504,7 @@ def main() -> None:
                         "trades",
                         "equity_end",
                         "cagr",
+                        "avg_fee_bps",
                     ],
                 )
                 writer.writeheader()
@@ -527,6 +519,7 @@ def main() -> None:
                         "trades": r.trades,
                         "equity_end": round(r.equity_end, 2),
                         "cagr": round((r.cagr or 0.0) * 100, 2),
+                        "avg_fee_bps": round((r.avg_fee_bps or 0.0), 4),
                     })
             print(f"Saved Pareto frontier to {ppath}")
 
@@ -547,6 +540,7 @@ def main() -> None:
                 "trades",
                 "equity_end",
                 "cagr",
+                "avg_fee_bps",
             ],
         )
         writer.writeheader()
@@ -569,6 +563,7 @@ def main() -> None:
                 "trades",
                 "equity_end",
                 "cagr",
+                "avg_fee_bps",
             ]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
@@ -585,20 +580,18 @@ def main() -> None:
                 repo = TimescaleRepo(dsn)
                 repo.connect()
                 try:
-                    fee_rows = repo.fetch_fee_snapshots(
-                        symbol, bars[0].ts if bars else None,
-                        bars[-1].ts if bars else None)
+                    fee_rows = repo.fetch_fee_snapshots(symbol,
+                                                        bars[0].ts if bars else None,
+                                                        bars[-1].ts if bars else None)
                 finally:
                     repo.close()
                 if fee_rows:
                     fee_lookup = build_fee_lookup_from_rows(fee_rows)
-                    fee_lookup_fn = (
-                        lambda ts, L=fee_lookup: L.get_bps(ts, True))
+                    fee_lookup_fn = (lambda ts, L=fee_lookup: L.get_bps(ts, True))
                 else:
                     fee_lookup_fn = None
-                res = eval_grid(symbol, interval, bars, strategy_list,
-                                fast_opts, slow_opts, risk_opts, atr_opts,
-                                fee_lookup_fn)
+                res = eval_grid(symbol, interval, bars, strategy_list, fast_opts,
+                                slow_opts, risk_opts, atr_opts, fee_lookup_fn)
                 for r in res:
                     writer.writerow({
                         "symbol": symbol,

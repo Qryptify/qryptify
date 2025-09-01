@@ -1,6 +1,6 @@
 # Qryptify Strategy
 
-Simple, fast bar-close backtesting with two‑sided strategies (long/short), a small engine for fees/ATR/rounding, and an optimizer that sweeps parameters across pairs and exports results.
+Simple, fast bar-close backtesting with two‑sided strategies (long/short), a small engine for ATR sizing, realistic exchange constraints, dynamic fees, and an optimizer that sweeps parameters across pairs and exports results.
 
 ## Install
 
@@ -9,6 +9,12 @@ pip install "psycopg[binary]" pyyaml loguru
 ```
 
 Python ≥ 3.10 recommended. Data is read from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
+
+Tip: snapshot exchange fees first for realistic results:
+
+```bash
+python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
+```
 
 ## Strategies (two‑sided)
 
@@ -29,11 +35,11 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback
 
 # Bollinger 50 × 3.0 on 1h (two‑sided)
 python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy bollinger --lookback 1000000 \
-  --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --fee-bps 4 --slip-bps 1
+  --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --slip-bps 1
 
 # RSI on 15m (two‑sided) with EMA filter
 python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
-  --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --fee-bps 4 --slip-bps 1
+  --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --slip-bps 1
 ```
 
 Options
@@ -41,7 +47,8 @@ Options
 - `--pair`: `SYMBOL/interval`
 - `--strategy`: `ema`, `bollinger`, `rsi`
 - Window: `--lookback` or `--start`/`--end`
-- Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--fee-bps`, `--slip-bps`
+- Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
+  - Fees are dynamic by default: the backtester reads `exchange_fees` snapshots from DB and applies the fee in effect at each trade timestamp (taker by default). If no snapshots are present, it falls back to a constant `--fee-bps` (optional).
 - EMA: `--fast`, `--slow`
 - Bollinger: `--bb-period`, `--bb-mult`
 - RSI: `--rsi-period`, `--rsi-entry`, `--rsi-exit`, `--rsi-ema`
@@ -52,6 +59,7 @@ Execution model
 - Signals on close; fills at next open with slippage.
 - Stops may gap; gap‑through exits at open, otherwise at stop (both with slippage).
 - ATR sizing; orders respect lot step, min notional, and tick size.
+- Fees: applied on both entry and exit notionals; shows total fees and average effective bps in the report.
 - Flips close at next open then re‑enter opposite (two fees).
 
 ## Optimizer
@@ -103,10 +111,16 @@ Flags
 
 Outputs
 
-- Best‑per‑pair CSV (`--out`): `symbol, interval, strategy, params, risk, atr_mult, pnl, max_dd, trades, equity_end, cagr`
-- Full grid CSV (`--full-out`): same columns across all grid rows (`dd` instead of `max_dd`)
+- Best‑per‑pair CSV (`--out`): `symbol, interval, strategy, params, risk, atr_mult, pnl, max_dd, trades, equity_end, cagr, avg_fee_bps`
+- Full grid CSV (`--full-out`): same columns across all grid rows (`dd` instead of `max_dd`), plus `avg_fee_bps`
 - Pareto frontier CSVs (`--pareto-dir`): per pair, non‑dominated points in (PnL↑, DD↓) space, sorted by DD asc
 - Markdown summary (`--md-out`): per‑pair section with best config, a top‑K table, and a runnable Reproduce command
+
+## Fees
+
+- Snapshots: Use `python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml` to snapshot current Binance USDT‑M maker/taker fee bps for all symbols in your config into the `exchange_fees` table.
+- Backtests/optimizer automatically load fee snapshots over the test window and apply the appropriate taker fee at each trade timestamp. If no snapshots are found, they fall back to a constant `--fee-bps` value.
+- Reports include `avg_fee_bps`, computed as total fees divided by the total entry+exit notional, scaled to bps.
 
 YAML example
 

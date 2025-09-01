@@ -72,17 +72,15 @@ class BollingerCore:
         self._prev_upper = None
 
     def update_and_events(
-            self,
-            close: float) -> Tuple[dict, Optional[Tuple[float, float, float]]]:
+            self, close: float) -> Tuple[dict, Optional[Tuple[float, float, float]]]:
         events = {
             "cross_up_upper": False,
             "cross_down_lower": False,
             "cross_below_mid": False,
             "cross_above_mid": False,
         }
-        if (self._prev_close is not None and self._prev_mid is not None
-                and self._prev_upper is not None
-                and self._prev_lower is not None):
+        if (self._prev_close is not None and self._prev_mid is not None and
+                self._prev_upper is not None and self._prev_lower is not None):
             events[
                 "cross_up_upper"] = self._prev_close <= self._prev_upper and close > self._prev_upper
             events[
@@ -144,16 +142,16 @@ class RSICore:
         if self.ema_filter > 0:
             self._ema = ema(self._alpha_ema, self._ema, close)
 
-        ema_ok_long = True if self.ema_filter <= 0 else (self._ema is not None
-                                                         and close > self._ema)
-        ema_ok_short = True if self.ema_filter <= 0 else (
-            self._ema is not None and close < self._ema)
+        ema_ok_long = True if self.ema_filter <= 0 else (self._ema is not None and
+                                                         close > self._ema)
+        ema_ok_short = True if self.ema_filter <= 0 else (self._ema is not None and
+                                                          close < self._ema)
         ema_cross_down = False if self.ema_filter <= 0 else (
-            prev_ema is not None and prev_close >= prev_ema
-            and self._ema is not None and close < self._ema)
+            prev_ema is not None and prev_close >= prev_ema and
+            self._ema is not None and close < self._ema)
         ema_cross_up = False if self.ema_filter <= 0 else (
-            prev_ema is not None and prev_close <= prev_ema
-            and self._ema is not None and close > self._ema)
+            prev_ema is not None and prev_close <= prev_ema and
+            self._ema is not None and close > self._ema)
 
         self._last_close = close
         return prev_rsi, rsi, ema_ok_long, ema_ok_short, ema_cross_down, ema_cross_up

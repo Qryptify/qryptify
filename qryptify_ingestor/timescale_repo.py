@@ -51,8 +51,7 @@ class TimescaleRepo:
     # Query helpers -----------------------------------------------------------
     def _require_conn(self) -> psycopg.Connection:
         if self._conn is None:
-            raise RuntimeError(
-                "TimescaleRepo.connect() must be called before use")
+            raise RuntimeError("TimescaleRepo.connect() must be called before use")
         return self._conn
 
     # Operations --------------------------------------------------------------
@@ -140,8 +139,7 @@ class TimescaleRepo:
         rows.reverse()
         return rows
 
-    def get_last_closed_ts(self, symbol: str,
-                           interval: str) -> Optional[datetime]:
+    def get_last_closed_ts(self, symbol: str, interval: str) -> Optional[datetime]:
         conn = self._require_conn()
         with conn.cursor() as cur:
             cur.execute(
@@ -149,11 +147,9 @@ class TimescaleRepo:
                 (symbol, interval),
             )
             row = cur.fetchone()
-        return row["last_closed_ts"] if row and row.get(
-            "last_closed_ts") else None
+        return row["last_closed_ts"] if row and row.get("last_closed_ts") else None
 
-    def set_last_closed_ts(self, symbol: str, interval: str,
-                           ts: datetime) -> None:
+    def set_last_closed_ts(self, symbol: str, interval: str, ts: datetime) -> None:
         conn = self._require_conn()
         try:
             with conn.cursor() as cur:
@@ -235,3 +231,34 @@ class TimescaleRepo:
             return dict(row) if row else None
         except psycopg.errors.UndefinedTable:
             return None
+
+    # Schema helpers ---------------------------------------------------------
+    def ensure_exchange_fees_schema(self) -> None:
+        """Create exchange_fees table, hypertable, and index if missing.
+
+        Idempotent: safe to call multiple times.
+        """
+        conn = self._require_conn()
+        ddl = (
+            "CREATE TABLE IF NOT EXISTS exchange_fees (\n"
+            "  ts TIMESTAMPTZ NOT NULL,\n"
+            "  symbol TEXT NOT NULL CHECK (symbol = upper(symbol)),\n"
+            "  maker_bps DOUBLE PRECISION NOT NULL,\n"
+            "  taker_bps DOUBLE PRECISION NOT NULL,\n"
+            "  source TEXT NOT NULL DEFAULT 'binance_fapi',\n"
+            "  note TEXT,\n"
+            "  PRIMARY KEY (symbol, ts)\n"
+            ");\n"
+            "SELECT create_hypertable('exchange_fees', 'ts', if_not_exists => TRUE, chunk_time_interval => INTERVAL '30 days');\n"
+            "CREATE INDEX IF NOT EXISTS idx_exchange_fees_symbol_ts ON exchange_fees(symbol, ts DESC);"
+        )
+        try:
+            with conn.cursor() as cur:
+                for stmt in ddl.split(";\n"):
+                    s = stmt.strip()
+                    if s:
+                        cur.execute(s)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise

@@ -4,6 +4,8 @@ import argparse
 from datetime import datetime
 from typing import List
 
+from qryptify_ingestor.config_utils import parse_pair
+
 from .backtester import backtest
 from .fees import build_fee_lookup_from_rows
 from .models import Bar
@@ -11,16 +13,6 @@ from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
 from .strategies.rsi_scalp import RSIScalpStrategy
-
-
-def _parse_pair(pair: str) -> tuple[str, str]:
-    if "/" in pair:
-        s, i = pair.split("/", 1)
-    elif "-" in pair:
-        s, i = pair.split("-", 1)
-    else:
-        raise ValueError("pair must be SYMBOL/interval or SYMBOL-interval")
-    return s.upper(), i
 
 
 def load_cfg_dsn(path: str = "qryptify_ingestor/config.yaml") -> str:
@@ -47,32 +39,20 @@ def build_bars(rows: List[dict]) -> List[Bar]:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(
-        description="Backtest strategies on stored OHLCV")
-    p.add_argument("--pair",
-                   help="SYMBOL/interval like BTCUSDT/4h",
-                   required=True)
+    p = argparse.ArgumentParser(description="Backtest strategies on stored OHLCV")
+    p.add_argument("--pair", help="SYMBOL/interval like BTCUSDT/4h", required=True)
     p.add_argument(
         "--strategy",
         choices=["ema", "bollinger", "boll", "bb", "rsi", "rsi_mr"],
         default="ema",
         help="Strategy: ema | bollinger | rsi",
     )
-    p.add_argument("--lookback",
-                   type=int,
-                   help="fetch latest N bars",
-                   default=2000)
+    p.add_argument("--lookback", type=int, help="fetch latest N bars", default=2000)
     p.add_argument("--start", help="ISO start datetime (UTC)")
     p.add_argument("--end", help="ISO end datetime (UTC)")
     # EMA params
-    p.add_argument("--fast",
-                   type=int,
-                   default=50,
-                   help="EMA fast period (ema)")
-    p.add_argument("--slow",
-                   type=int,
-                   default=200,
-                   help="EMA slow period (ema)")
+    p.add_argument("--fast", type=int, default=50, help="EMA fast period (ema)")
+    p.add_argument("--slow", type=int, default=200, help="EMA slow period (ema)")
     # Bollinger params
     p.add_argument("--bb-period",
                    type=int,
@@ -83,10 +63,7 @@ def main() -> None:
                    default=2.0,
                    help="Bollinger std-dev multiplier (bollinger)")
     # RSI scalping params
-    p.add_argument("--rsi-period",
-                   type=int,
-                   default=14,
-                   help="RSI period (rsi)")
+    p.add_argument("--rsi-period", type=int, default=14, help="RSI period (rsi)")
     p.add_argument("--rsi-entry",
                    type=float,
                    default=30.0,
@@ -114,18 +91,17 @@ def main() -> None:
                    type=float,
                    default=0.0,
                    help="Minimum order quantity (0 to ignore)")
-    p.add_argument(
-        "--min-notional",
-        type=float,
-        default=0.0,
-        help="Minimum order notional in quote currency (0 to ignore)")
+    p.add_argument("--min-notional",
+                   type=float,
+                   default=0.0,
+                   help="Minimum order notional in quote currency (0 to ignore)")
     p.add_argument("--price-tick",
                    type=float,
                    default=0.0,
                    help="Price tick size for stop rounding (0 to ignore)")
     args = p.parse_args()
 
-    symbol, interval = _parse_pair(args.pair)
+    symbol, interval = parse_pair(args.pair)
 
     # Local import so --help works without loguru/psycopg until run
     from qryptify_ingestor.timescale_repo import TimescaleRepo  # type: ignore
@@ -145,8 +121,7 @@ def main() -> None:
         print(f"Fetched {len(rows)} bars for {symbol}/{interval}")
         bars = build_bars(rows)
         # Build fee snapshots for the same time window (if available)
-        fee_rows = repo.fetch_fee_snapshots(symbol,
-                                            bars[0].ts if bars else None,
+        fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts if bars else None,
                                             bars[-1].ts if bars else None)
         # Select strategy
         strat_key = args.strategy
@@ -158,8 +133,7 @@ def main() -> None:
         if strat_key == "ema":
             strategy = EMACrossStrategy(fast=args.fast, slow=args.slow)
         elif strat_key == "bollinger":
-            strategy = BollingerBandStrategy(period=args.bb_period,
-                                             mult=args.bb_mult)
+            strategy = BollingerBandStrategy(period=args.bb_period, mult=args.bb_mult)
         elif strat_key == "rsi":
             strategy = RSIScalpStrategy(
                 rsi_period=args.rsi_period,
@@ -169,8 +143,8 @@ def main() -> None:
             )
         else:
             raise ValueError(f"Unknown strategy: {args.strategy}")
-        fee_lookup_fn = (lambda ts, L=build_fee_lookup_from_rows(fee_rows): L.
-                         get_bps(ts, True)) if fee_rows else None
+        fee_lookup_fn = (lambda ts, L=build_fee_lookup_from_rows(fee_rows): L.get_bps(
+            ts, True)) if fee_rows else None
         risk = RiskParams(
             start_equity=args.equity,
             risk_per_trade=args.risk,
@@ -196,6 +170,7 @@ def main() -> None:
         print(f"  Avg win:    {report.avg_win:.2f}")
         print(f"  Avg loss:   {report.avg_loss:.2f}")
         print(f"  Fees:       {report.total_fees:.2f}")
+        print(f"  Avg fee:    {report.avg_fee_bps:.2f} bps ({report.fee_model})")
         print(f"  PnL:        {report.total_pnl:.2f}")
         print(f"  Equity end: {report.equity_end:.2f}")
         if report.cagr is not None:

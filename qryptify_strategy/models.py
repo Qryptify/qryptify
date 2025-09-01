@@ -69,3 +69,5 @@ class BacktestReport:
     avg_win: float
     avg_loss: float
     cagr: Optional[float]
+    avg_fee_bps: float = 0.0
+    fee_model: str = "fixed_bps"
