@@ -14,7 +14,6 @@ class BollingerBandStrategy(Strategy):
 
     period: int = 20
     mult: float = 2.0
-    id: str = "bollinger"
 
     def __post_init__(self) -> None:
         self._core = BollingerCore(self.period, self.mult)

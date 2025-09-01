@@ -16,7 +16,6 @@ class RSIScalpStrategy(Strategy):
     entry: float = 30.0
     exit: float = 55.0
     ema_filter: int = 200
-    id: str = "rsi"
 
     def __post_init__(self) -> None:
         if not (0 < self.entry < 100) or not (0 < self.exit < 100):

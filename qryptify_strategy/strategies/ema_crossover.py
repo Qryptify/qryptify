@@ -14,7 +14,6 @@ class EMACrossStrategy(Strategy):
 
     fast: int = 50
     slow: int = 200
-    id: str = "ema_cross"
 
     def __post_init__(self) -> None:
         self._core = EMACrossCore(self.fast, self.slow)
