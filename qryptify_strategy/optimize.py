@@ -227,7 +227,7 @@ def main() -> None:
                    help="Score lambda: pnl - lam*dd")
     p.add_argument(
         "--out",
-        default="optimizer_results.csv",
+        default="reports/optimizer_results.csv",
         help="Output CSV file with best configs per pair",
     )
     args = p.parse_args()
@@ -255,6 +255,7 @@ def main() -> None:
     dsn = load_cfg_dsn()
 
     import csv
+    import os
     rows_out: List[dict] = []
 
     for symbol, interval in pair_specs:
@@ -297,6 +298,7 @@ def main() -> None:
         })
 
     # Write CSV
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", newline="") as f:
         writer = csv.DictWriter(
             f,

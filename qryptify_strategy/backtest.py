@@ -57,11 +57,11 @@ def main() -> None:
     p.add_argument(
         "--strategy",
         choices=[
-            "ema", "ema_ls", "ema2", "bollinger", "boll", "bb", "rsi",
-            "rsi_mr", "boll_ls", "rsi_ls"
+            "ema", "ema_ls", "bollinger", "boll", "bb", "boll_ls", "rsi",
+            "rsi_mr", "rsi_ls"
         ],
         default="ema",
-        help="Which strategy to run (ema|ema_ls|bollinger|rsi)",
+        help="Strategy: ema | ema_ls | bollinger | boll_ls | rsi | rsi_ls",
     )
     p.add_argument("--lookback",
                    type=int,
