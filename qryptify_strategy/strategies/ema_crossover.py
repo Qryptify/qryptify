@@ -11,7 +11,6 @@ from ..strategy_utils import EMACrossCore
 
 @dataclass
 class EMACrossStrategy(Strategy):
-    """EMA crossover (long/short), signals on close."""
 
     fast: int = 50
     slow: int = 200

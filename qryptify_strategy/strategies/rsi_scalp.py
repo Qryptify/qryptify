@@ -11,12 +11,11 @@ from ..strategy_utils import RSICore
 
 @dataclass
 class RSIScalpStrategy(Strategy):
-    """RSI mean-reversion (long/short) with optional EMA filter."""
 
     rsi_period: int = 14
     entry: float = 30.0
     exit: float = 55.0
-    ema_filter: int = 200  # set to 0 to disable filter
+    ema_filter: int = 200
     id: str = "rsi"
 
     def __post_init__(self) -> None:

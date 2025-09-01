@@ -11,7 +11,6 @@ from ..strategy_utils import BollingerCore
 
 @dataclass
 class BollingerBandStrategy(Strategy):
-    """Bollinger Bands breakout (long/short), signals on close."""
 
     period: int = 20
     mult: float = 2.0
