@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Callable, Optional
 
 
 @dataclass
@@ -39,6 +39,8 @@ class RiskParams:
     atr_mult_trail: float = 0.0
     # Optional MFE trigger before trailing activates (in ATRs)
     atr_trail_trigger_mult: float = 0.0
+    # Optional dynamic fee lookup: function(ts) -> fee_bps; overrides fee_bps if set
+    fee_lookup: Optional[Callable[[datetime], float]] = None
 
 
 @dataclass
