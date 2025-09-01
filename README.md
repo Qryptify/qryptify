@@ -22,7 +22,7 @@ The CLI reads the DB DSN from `qryptify_ingestor/config.yaml`.
 Example (EMA 50/200 on 4h):
 
 ```bash
-python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback 2000 \
+python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback 1000000 \
   --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
 ```
 
@@ -31,7 +31,7 @@ Short‑TF example (RSI scalping on 15m):
 ```bash
 python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi \
   --rsi-period 8 --rsi-entry 28 --rsi-exit 58 --rsi-ema 50 \
-  --lookback 3000 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
+  -- --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
 ```
 
 Options:

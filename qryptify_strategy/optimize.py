@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -178,7 +179,7 @@ def choose_best(results: List[Result], dd_cap: float | None,
                     reverse=True)
     top = scored[0]
     # Return also top 10 frontier for inspection
-    return top, scored[:10]
+    return top, scored
 
 
 def main() -> None:
@@ -223,6 +224,17 @@ def main() -> None:
         default="reports/optimizer_results.csv",
         help="Output CSV file with best configs per pair",
     )
+    p.add_argument(
+        "--full-out",
+        default="",
+        help="Optional path to write full grid results as CSV (all rows)",
+    )
+    p.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="How many top rows to print per pair",
+    )
     args = p.parse_args()
 
     pair_specs: List[Tuple[str, str]] = []
@@ -263,17 +275,23 @@ def main() -> None:
         strategies = [s.strip() for s in args.strategies.split(",") if s]
         results = eval_grid(symbol, interval, bars, strategies, fast_opts,
                             slow_opts, risk_opts, atr_opts)
-        best, top10 = choose_best(results, dd_cap, args.lam)
+        if not results:
+            print(
+                f"\nNo results for {symbol} {interval} (check data or grids)")
+            continue
+        best, ranked = choose_best(results, dd_cap, args.lam)
 
         print(f"\nSweep done for {symbol} {interval}")
         print("Top by score (pnl - lam*dd):")
-        for r in top10:
+        for r in ranked[:max(1, args.top_k)]:
             print(
-                f"  fast={r.fast} slow={r.slow} risk={r.risk} atr={r.atr_mult} pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%}"
+                f"  strat={r.strategy} params={r.params} risk={r.risk} atr={r.atr_mult} "
+                f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%}"
             )
         print("Recommended:")
         print(
-            f"  fast={best.fast} slow={best.slow} risk={best.risk} atr={best.atr_mult} pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%}"
+            f"  strat={best.strategy} params={best.params} risk={best.risk} atr={best.atr_mult} "
+            f"pnl={best.pnl:.2f} dd={best.dd:.0f} trades={best.trades} eq={best.equity_end:.2f} cagr={(best.cagr or 0.0):.2%}"
         )
 
         rows_out.append({
@@ -312,6 +330,55 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(rows_out)
     print(f"\nSaved results to {args.out}")
+
+    # Optional full grid CSV
+    if args.full_out:
+        os.makedirs(os.path.dirname(args.full_out) or ".", exist_ok=True)
+        with open(args.full_out, "w", newline="") as f:
+            fieldnames = [
+                "symbol",
+                "interval",
+                "strategy",
+                "params",
+                "risk",
+                "atr_mult",
+                "pnl",
+                "dd",
+                "trades",
+                "equity_end",
+                "cagr",
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            # Recompute all results sequentially to include per-pair symbol/interval
+            for symbol, interval in pair_specs:
+                repo = TimescaleRepo(dsn)
+                repo.connect()
+                try:
+                    rows = repo.fetch_latest_n(symbol, interval, args.lookback)
+                finally:
+                    repo.close()
+                bars = build_bars(rows)
+                strategies = [
+                    s.strip() for s in args.strategies.split(",") if s
+                ]
+                res = eval_grid(symbol, interval, bars, strategies, fast_opts,
+                                slow_opts, risk_opts, atr_opts)
+                for r in res:
+                    writer.writerow({
+                        "symbol": symbol,
+                        "interval": interval,
+                        "strategy": r.strategy,
+                        "params": r.params,
+                        "risk": r.risk,
+                        "atr_mult": r.atr_mult,
+                        "pnl": round(r.pnl, 2),
+                        "dd": round(r.dd, 2),
+                        "trades": r.trades,
+                        "equity_end": round(r.equity_end, 2),
+                        "cagr": round((r.cagr or 0.0) * 100, 2),
+                    })
+        print(f"Saved full grid to {args.full_out}")
 
 
 if __name__ == "__main__":
