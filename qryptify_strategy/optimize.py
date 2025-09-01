@@ -2,72 +2,173 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 from .backtest import _parse_pair
 from .backtest import build_bars
 from .backtest import load_cfg_dsn
 from .backtester import backtest
 from .models import RiskParams
+from .strategies.bollinger_ls import BollingerLongShortStrategy
 from .strategies.ema_crossover_ls import EMACrossLongShortStrategy
+from .strategies.rsi_ls import RSITwoSidedStrategy
 
 
 @dataclass
 class Result:
-    fast: int
-    slow: int
+    strategy: str
+    params: str
     risk: float
     atr_mult: float
     pnl: float
     dd: float
     trades: int
-    cagr: float | None
+    cagr: Optional[float]
     equity_end: float
+    # optional per-strategy fields for debugging
+    fast: Optional[int] = None
+    slow: Optional[int] = None
+    bb_period: Optional[int] = None
+    bb_mult: Optional[float] = None
+    rsi_period: Optional[int] = None
+    entry_low: Optional[float] = None
+    exit_low: Optional[float] = None
+    entry_high: Optional[float] = None
+    exit_high: Optional[float] = None
 
 
 def eval_grid(
     symbol: str,
     interval: str,
     bars,
+    strategies: List[str],
     fast_opts: Iterable[int],
     slow_opts: Iterable[int],
     risk_opts: Iterable[float],
     atr_opts: Iterable[float],
 ) -> List[Result]:
     out: List[Result] = []
-    for fast in fast_opts:
-        for slow in slow_opts:
-            if fast >= slow:
-                continue
-            for risk in risk_opts:
-                for atr_mult in atr_opts:
-                    strat = EMACrossLongShortStrategy(fast=fast, slow=slow)
-                    rpt, _ = backtest(
-                        symbol,
-                        interval,
-                        bars,
-                        strat,
-                        RiskParams(
-                            start_equity=10_000.0,
-                            risk_per_trade=risk,
-                            atr_period=14,
-                            atr_mult_stop=atr_mult,
-                            fee_bps=4.0,
-                            slippage_bps=1.0,
-                        ),
-                    )
-                    out.append(
-                        Result(
-                            fast=fast,
-                            slow=slow,
-                            risk=risk,
-                            atr_mult=atr_mult,
-                            pnl=rpt.total_pnl,
-                            dd=rpt.max_drawdown,
-                            trades=rpt.trades,
-                            cagr=rpt.cagr,
-                            equity_end=rpt.equity_end,
-                        ))
+    for risk in risk_opts:
+        for atr_mult in atr_opts:
+            # EMA long/short
+            if "ema_ls" in strategies:
+                for fast in fast_opts:
+                    for slow in slow_opts:
+                        if fast >= slow:
+                            continue
+                        strat = EMACrossLongShortStrategy(fast=fast, slow=slow)
+                        rpt, _ = backtest(
+                            symbol,
+                            interval,
+                            bars,
+                            strat,
+                            RiskParams(
+                                start_equity=10_000.0,
+                                risk_per_trade=risk,
+                                atr_period=14,
+                                atr_mult_stop=atr_mult,
+                                fee_bps=4.0,
+                                slippage_bps=1.0,
+                            ),
+                        )
+                        out.append(
+                            Result(
+                                strategy="ema_ls",
+                                params=f"fast={fast},slow={slow}",
+                                risk=risk,
+                                atr_mult=atr_mult,
+                                pnl=rpt.total_pnl,
+                                dd=rpt.max_drawdown,
+                                trades=rpt.trades,
+                                cagr=rpt.cagr,
+                                equity_end=rpt.equity_end,
+                                fast=fast,
+                                slow=slow,
+                            ))
+            # Bollinger long/short
+            if "boll_ls" in strategies:
+                for bb_period in [20, 50]:
+                    for bb_mult in [2.0, 2.5, 3.0]:
+                        strat = BollingerLongShortStrategy(period=bb_period,
+                                                           mult=bb_mult)
+                        rpt, _ = backtest(
+                            symbol,
+                            interval,
+                            bars,
+                            strat,
+                            RiskParams(
+                                start_equity=10_000.0,
+                                risk_per_trade=risk,
+                                atr_period=14,
+                                atr_mult_stop=atr_mult,
+                                fee_bps=4.0,
+                                slippage_bps=1.0,
+                            ),
+                        )
+                        out.append(
+                            Result(
+                                strategy="boll_ls",
+                                params=f"period={bb_period},mult={bb_mult}",
+                                risk=risk,
+                                atr_mult=atr_mult,
+                                pnl=rpt.total_pnl,
+                                dd=rpt.max_drawdown,
+                                trades=rpt.trades,
+                                cagr=rpt.cagr,
+                                equity_end=rpt.equity_end,
+                                bb_period=bb_period,
+                                bb_mult=bb_mult,
+                            ))
+            # RSI two-sided
+            if "rsi_ls" in strategies:
+                for rsi_period in [8, 14]:
+                    for entry_low in [25.0, 30.0]:
+                        for exit_low in [50.0, 55.0]:
+                            for entry_high in [70.0, 75.0]:
+                                for exit_high in [45.0, 50.0]:
+                                    for ema_filter in [0, 200]:
+                                        strat = RSITwoSidedStrategy(
+                                            rsi_period=rsi_period,
+                                            entry_low=entry_low,
+                                            exit_low=exit_low,
+                                            entry_high=entry_high,
+                                            exit_high=exit_high,
+                                            ema_filter=ema_filter,
+                                        )
+                                        rpt, _ = backtest(
+                                            symbol,
+                                            interval,
+                                            bars,
+                                            strat,
+                                            RiskParams(
+                                                start_equity=10_000.0,
+                                                risk_per_trade=risk,
+                                                atr_period=14,
+                                                atr_mult_stop=atr_mult,
+                                                fee_bps=4.0,
+                                                slippage_bps=1.0,
+                                            ),
+                                        )
+                                        out.append(
+                                            Result(
+                                                strategy="rsi_ls",
+                                                params=
+                                                (f"period={rsi_period},eL={entry_low},xL={exit_low},"
+                                                 f"eH={entry_high},xH={exit_high},ema={ema_filter}"
+                                                 ),
+                                                risk=risk,
+                                                atr_mult=atr_mult,
+                                                pnl=rpt.total_pnl,
+                                                dd=rpt.max_drawdown,
+                                                trades=rpt.trades,
+                                                cagr=rpt.cagr,
+                                                equity_end=rpt.equity_end,
+                                                rsi_period=rsi_period,
+                                                entry_low=entry_low,
+                                                exit_low=exit_low,
+                                                entry_high=entry_high,
+                                                exit_high=exit_high,
+                                            ))
     return out
 
 
@@ -96,6 +197,10 @@ def main() -> None:
         "Comma-separated list of pairs (SYMBOL/interval). If set, overrides --pair",
     )
     p.add_argument("--lookback", type=int, default=32132)
+    p.add_argument("--strategies",
+                   type=str,
+                   default="ema_ls,boll_ls,rsi_ls",
+                   help="Comma-separated strategies to sweep")
     p.add_argument("--fast",
                    type=str,
                    default="10,20,30,50",
@@ -161,8 +266,9 @@ def main() -> None:
             repo.close()
         bars = build_bars(rows)
 
-        results = eval_grid(symbol, interval, bars, fast_opts, slow_opts,
-                            risk_opts, atr_opts)
+        strategies = [s.strip() for s in args.strategies.split(",") if s]
+        results = eval_grid(symbol, interval, bars, strategies, fast_opts,
+                            slow_opts, risk_opts, atr_opts)
         best, top10 = choose_best(results, dd_cap, args.lam)
 
         print(f"\nSweep done for {symbol} {interval}")
@@ -179,8 +285,8 @@ def main() -> None:
         rows_out.append({
             "symbol": symbol,
             "interval": interval,
-            "fast": best.fast,
-            "slow": best.slow,
+            "strategy": best.strategy,
+            "params": best.params,
             "risk": best.risk,
             "atr_mult": best.atr_mult,
             "pnl": round(best.pnl, 2),
@@ -197,8 +303,8 @@ def main() -> None:
             fieldnames=[
                 "symbol",
                 "interval",
-                "fast",
-                "slow",
+                "strategy",
+                "params",
                 "risk",
                 "atr_mult",
                 "pnl",

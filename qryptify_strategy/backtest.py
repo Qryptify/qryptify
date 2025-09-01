@@ -8,8 +8,10 @@ from .backtester import backtest
 from .models import Bar
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
+from .strategies.bollinger_ls import BollingerLongShortStrategy
 from .strategies.ema_crossover import EMACrossStrategy
 from .strategies.ema_crossover_ls import EMACrossLongShortStrategy
+from .strategies.rsi_ls import RSITwoSidedStrategy
 from .strategies.rsi_scalp import RSIScalpStrategy
 
 
@@ -55,14 +57,8 @@ def main() -> None:
     p.add_argument(
         "--strategy",
         choices=[
-            "ema",
-            "ema_ls",
-            "ema2",
-            "bollinger",
-            "boll",
-            "bb",
-            "rsi",
-            "rsi_mr",
+            "ema", "ema_ls", "ema2", "bollinger", "boll", "bb", "rsi",
+            "rsi_mr", "boll_ls", "rsi_ls"
         ],
         default="ema",
         help="Which strategy to run (ema|ema_ls|bollinger|rsi)",
@@ -166,11 +162,23 @@ def main() -> None:
         elif strat_key == "bollinger":
             strategy = BollingerBandStrategy(period=args.bb_period,
                                              mult=args.bb_mult)
+        elif strat_key == "boll_ls":
+            strategy = BollingerLongShortStrategy(period=args.bb_period,
+                                                  mult=args.bb_mult)
         elif strat_key in ("rsi", "rsi_mr"):
             strategy = RSIScalpStrategy(
                 rsi_period=args.rsi_period,
                 entry=args.rsi_entry,
                 exit=args.rsi_exit,
+                ema_filter=args.rsi_ema,
+            )
+        elif strat_key == "rsi_ls":
+            strategy = RSITwoSidedStrategy(
+                rsi_period=args.rsi_period,
+                entry_low=args.rsi_entry,
+                exit_low=args.rsi_exit,
+                entry_high=max(70.0, 100.0 - args.rsi_entry),
+                exit_high=min(55.0, 100.0 - args.rsi_exit),
                 ema_filter=args.rsi_ema,
             )
         else:
