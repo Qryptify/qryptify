@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
+import yaml
+
 from .backtest import _parse_pair
 from .backtest import build_bars
 from .backtest import load_cfg_dsn
@@ -252,12 +254,15 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result,
 def main() -> None:
     p = argparse.ArgumentParser(description="Parameter sweep optimizer")
     p.add_argument("--pair", help="SYMBOL/interval, e.g., BTCUSDT/1h (single)")
+    p.add_argument("--config",
+                   default="",
+                   help="YAML with pairs/strategies/grids")
     p.add_argument(
         "--pairs",
         help=
         "Comma-separated list of pairs (SYMBOL/interval). If set, overrides --pair",
     )
-    p.add_argument("--lookback", type=int, default=32132)
+    p.add_argument("--lookback", type=int, default=1000000)
     p.add_argument("--strategies",
                    type=str,
                    default="ema,bollinger,rsi",
@@ -314,6 +319,13 @@ def main() -> None:
     )
     args = p.parse_args()
 
+    # Load optional YAML config
+    cfg: dict = {}
+    if args.config:
+        with open(args.config, "r") as f:
+            cfg = yaml.safe_load(f) or {}
+
+    # Resolve pairs: CLI > config.pairs
     pair_specs: List[Tuple[str, str]] = []
     if args.pairs:
         for item in args.pairs.split(","):
@@ -324,14 +336,60 @@ def main() -> None:
     elif args.pair:
         pair_specs.append(_parse_pair(args.pair))
     else:
-        raise SystemExit("Provide --pair or --pairs")
+        cfg_pairs = cfg.get("pairs") or []
+        if not cfg_pairs:
+            raise SystemExit(
+                "Provide --pair/--pairs or --config with pairs list")
+        for item in cfg_pairs:
+            pair_specs.append(_parse_pair(str(item)))
 
-    fast_opts = [int(x) for x in args.fast.split(",") if x]
-    slow_opts = [int(x) for x in args.slow.split(",") if x]
-    risk_opts = [float(x) for x in args.risk.split(",") if x]
-    # argparse converts dashes to underscores
-    atr_opts = [float(x) for x in getattr(args, "atr_mult").split(",") if x]
-    dd_cap = None if args.dd_cap and args.dd_cap <= 0 else args.dd_cap
+    # Resolve strategies
+    if args.strategies:
+        strategy_list = [s.strip() for s in args.strategies.split(",") if s]
+    else:
+        cfg_strats = cfg.get("strategies") or []
+        strategy_list = (
+            [str(s).strip() for s in cfg_strats
+             if str(s).strip()] if cfg_strats else ["ema", "bollinger", "rsi"])
+
+    # Grids from CLI with config overrides
+    def cfg_list(name: str, arg_vals: List[str]) -> List[str]:
+        v = cfg.get(name)
+        if v is None:
+            v = cfg.get(name.replace("_", "-"))
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return arg_vals
+
+    fast_opts = [
+        int(x)
+        for x in cfg_list("fast", [x for x in args.fast.split(",") if x])
+    ]
+    slow_opts = [
+        int(x)
+        for x in cfg_list("slow", [x for x in args.slow.split(",") if x])
+    ]
+    risk_opts = [
+        float(x)
+        for x in cfg_list("risk", [x for x in args.risk.split(",") if x])
+    ]
+    atr_opts = [
+        float(x) for x in cfg_list(
+            "atr_mult", [x for x in getattr(args, "atr_mult").split(",") if x])
+    ]
+
+    # Scalars
+    lookback = int(cfg.get("lookback", args.lookback))
+    dd_cap = cfg.get("dd_cap", args.dd_cap)
+    dd_cap = None if dd_cap and float(dd_cap) <= 0 else float(dd_cap)
+    lam = float(cfg.get("lam", args.lam))
+    top_k = int(cfg.get("top_k", args.top_k))
+
+    # Outputs
+    out_path = cfg.get("out", args.out)
+    full_out = cfg.get("full_out", args.full_out)
+    pareto_dir = cfg.get("pareto_dir", args.pareto_dir)
+    md_out = cfg.get("md_out", args.md_out)
 
     from qryptify_ingestor.timescale_repo import TimescaleRepo  # late import
     dsn = load_cfg_dsn()
@@ -345,23 +403,26 @@ def main() -> None:
         repo = TimescaleRepo(dsn)
         repo.connect()
         try:
-            rows = repo.fetch_latest_n(symbol, interval, args.lookback)
+            rows = repo.fetch_latest_n(symbol, interval, lookback)
         finally:
             repo.close()
         bars = build_bars(rows)
 
-        strategies = [s.strip() for s in args.strategies.split(",") if s]
-        results = eval_grid(symbol, interval, bars, strategies, fast_opts,
-                            slow_opts, risk_opts, atr_opts)
+        try:
+            results = eval_grid(symbol, interval, bars, strategy_list,
+                                fast_opts, slow_opts, risk_opts, atr_opts)
+        except Exception as e:
+            print(f"\nSkipping {symbol} {interval}: {e}")
+            continue
         if not results:
             print(
                 f"\nNo results for {symbol} {interval} (check data or grids)")
             continue
-        best, ranked = choose_best(results, dd_cap, args.lam)
+        best, ranked = choose_best(results, dd_cap, lam)
 
         print(f"\nSweep done for {symbol} {interval}")
         print("Top by score (pnl - lam*dd):")
-        for r in ranked[:max(1, args.top_k)]:
+        for r in ranked[:max(1, top_k)]:
             print(
                 f"  strat={r.strategy} params={r.params} risk={r.risk} atr={r.atr_mult} "
                 f"pnl={r.pnl:.2f} dd={r.dd:.0f} trades={r.trades} eq={r.equity_end:.2f} cagr={(r.cagr or 0.0):.2%}"
@@ -387,7 +448,7 @@ def main() -> None:
         md_lines.append(
             "| Strategy | Params | Risk | ATR | PnL | DD | Trades | Equity | CAGR |\n|---|---|---:|---:|---:|---:|---:|---:|---:|"
         )
-        for r in ranked[:max(1, args.top_k)]:
+        for r in ranked[:max(1, top_k)]:
             md_lines.append(
                 f"| {r.strategy} | {r.params} | {r.risk} | {r.atr_mult} | {r.pnl:.2f} | {r.dd:.0f} | {r.trades} | {r.equity_end:.2f} | {(r.cagr or 0.0):.2%} |"
             )
@@ -407,8 +468,8 @@ def main() -> None:
         })
 
         # Pareto frontier per pair
-        if args.pareto_dir:
-            outdir = Path(args.pareto_dir)
+        if pareto_dir:
+            outdir = Path(pareto_dir)
             outdir.mkdir(parents=True, exist_ok=True)
             fname = f"pareto_{symbol}_{interval.replace('/', '_')}.csv"
             ppath = outdir / fname
@@ -444,8 +505,8 @@ def main() -> None:
             print(f"Saved Pareto frontier to {ppath}")
 
     # Write CSV
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    with open(args.out, "w", newline="") as f:
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", newline="") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=[
@@ -464,12 +525,12 @@ def main() -> None:
         )
         writer.writeheader()
         writer.writerows(rows_out)
-    print(f"\nSaved results to {args.out}")
+    print(f"\nSaved results to {out_path}")
 
     # Optional full grid CSV
-    if args.full_out:
-        os.makedirs(os.path.dirname(args.full_out) or ".", exist_ok=True)
-        with open(args.full_out, "w", newline="") as f:
+    if full_out:
+        os.makedirs(os.path.dirname(full_out) or ".", exist_ok=True)
+        with open(full_out, "w", newline="") as f:
             fieldnames = [
                 "symbol",
                 "interval",
@@ -490,15 +551,12 @@ def main() -> None:
                 repo = TimescaleRepo(dsn)
                 repo.connect()
                 try:
-                    rows = repo.fetch_latest_n(symbol, interval, args.lookback)
+                    rows = repo.fetch_latest_n(symbol, interval, lookback)
                 finally:
                     repo.close()
                 bars = build_bars(rows)
-                strategies = [
-                    s.strip() for s in args.strategies.split(",") if s
-                ]
-                res = eval_grid(symbol, interval, bars, strategies, fast_opts,
-                                slow_opts, risk_opts, atr_opts)
+                res = eval_grid(symbol, interval, bars, strategy_list,
+                                fast_opts, slow_opts, risk_opts, atr_opts)
                 for r in res:
                     writer.writerow({
                         "symbol": symbol,
@@ -513,7 +571,7 @@ def main() -> None:
                         "equity_end": round(r.equity_end, 2),
                         "cagr": round((r.cagr or 0.0) * 100, 2),
                     })
-        print(f"Saved full grid to {args.full_out}")
+        print(f"Saved full grid to {full_out}")
 
     # Write Markdown summary
     md_path = Path(args.md_out)

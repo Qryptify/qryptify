@@ -1,10 +1,19 @@
 pairs:
   - BTCUSDT/4h
+  - BTCUSDT/2h
   - BTCUSDT/1h
+  - BTCUSDT/30m
   - BTCUSDT/15m
-  - BTCUSDT/1m
   - ETHUSDT/4h
+  - ETHUSDT/2h
+  - ETHUSDT/1h
+  - ETHUSDT/30m
+  - ETHUSDT/15m
   - BNBUSDT/4h
+  - BNBUSDT/2h
+  - BNBUSDT/1h
+  - BNBUSDT/30m
+  - BNBUSDT/15m
 rest:
   klines_limit: 1500
   endpoint: "https://fapi.binance.com"
