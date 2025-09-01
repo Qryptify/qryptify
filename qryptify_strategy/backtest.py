@@ -7,7 +7,7 @@ from typing import List
 from qryptify_ingestor.config_utils import parse_pair
 
 from .backtester import backtest
-from .fees import build_fee_lookup_from_rows
+from .fees import binance_futures_fee_bps
 from .models import Bar
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
@@ -80,7 +80,13 @@ def main() -> None:
     p.add_argument("--risk", type=float, default=0.01)
     p.add_argument("--atr", type=int, default=14)
     p.add_argument("--atr-mult", type=float, default=2.0)
-    p.add_argument("--fee-bps", type=float, default=4.0)
+    p.add_argument(
+        "--fee-bps",
+        type=float,
+        default=-1.0,
+        help=
+        "Fixed taker fee bps. If <0, fetch from Binance API and fallback to 4.0 on error.",
+    )
     p.add_argument("--slip-bps", type=float, default=1.0)
     # Optional exchange constraints (improve live reproducibility)
     p.add_argument("--qty-step",
@@ -120,9 +126,15 @@ def main() -> None:
 
         print(f"Fetched {len(rows)} bars for {symbol}/{interval}")
         bars = build_bars(rows)
-        # Build fee snapshots for the same time window (if available)
-        fee_rows = repo.fetch_fee_snapshots(symbol, bars[0].ts if bars else None,
-                                            bars[-1].ts if bars else None)
+        # Determine a fixed taker fee bps for this symbol from API (fallback 4.0).
+        if args.fee_bps is None or args.fee_bps < 0:
+            try:
+                _, taker_bps = binance_futures_fee_bps(symbol)
+                fee_bps_val = float(taker_bps)
+            except Exception:
+                fee_bps_val = 4.0
+        else:
+            fee_bps_val = float(args.fee_bps)
         # Select strategy
         strat_key = args.strategy
         if strat_key in ("boll", "bb"):
@@ -143,15 +155,13 @@ def main() -> None:
             )
         else:
             raise ValueError(f"Unknown strategy: {args.strategy}")
-        fee_lookup_fn = (lambda ts, L=build_fee_lookup_from_rows(fee_rows): L.get_bps(
-            ts, True)) if fee_rows else None
         risk = RiskParams(
             start_equity=args.equity,
             risk_per_trade=args.risk,
             atr_period=args.atr,
             atr_mult_stop=args.atr_mult,
-            fee_bps=args.fee_bps,
-            fee_lookup=fee_lookup_fn,
+            fee_bps=fee_bps_val,
+            fee_lookup=None,
             slippage_bps=args.slip_bps,
             qty_step=args.qty_step,
             min_qty=args.min_qty,

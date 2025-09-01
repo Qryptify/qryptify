@@ -21,8 +21,6 @@ docker compose up -d
 ```
 
 The `sql/001_init.sql` initializes the hypertable (`candlesticks`) and resume table (`sync_state`), with compression policies.
-`sql/003_fees.sql` defines `exchange_fees` used by the strategy/optimizer; the
-snapshot script can also create it if missing.
 
 ## Install
 
@@ -102,20 +100,11 @@ Conventions: `symbol` uppercased; OHLCV stored as DOUBLE PRECISION for speed.
 - `timescale_repo.py`: thin, explicit Timescale access (connect/close, upsert, fetch, resume)
 - `coordinator.py`: orchestrates backfill then live; has retry on transient errors
 
-## Fee snapshots
+## Fees
 
-Strategy backtests and optimizer can apply time‑varying exchange fees from the DB.
-
-Insert a snapshot (maker/taker bps per symbol) for all pairs configured in your YAML:
-
-```bash
-python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
-```
-
-This writes to `exchange_fees(symbol, ts, maker_bps, taker_bps, source, note)`.
-Snapshots are sparse and only created when you run the script; schedule it periodically if your account tier changes.
+This repo does not include a fee snapshot table or script anymore. Strategy tools fetch current taker bps from Binance’s API per symbol at run time (fallback 4.0 bps). If you want historical, time‑varying fees, manage that externally.
 
 ## Using with qryptify_strategy
 
-- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV and fee snapshots
+- The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV. Fees are resolved from API at run time.
 - You can pass the same YAML into the optimizer’s `--config` to iterate pairs/strategies and export results

@@ -1,6 +1,6 @@
 # Qryptify Strategy
 
-Simple, fast bar-close backtesting with two‑sided strategies (long/short), a small engine for ATR sizing, realistic exchange constraints, dynamic fees, and an optimizer that sweeps parameters across pairs and exports results.
+Simple, fast bar-close backtesting with two‑sided strategies (long/short), a small engine for ATR sizing, realistic exchange constraints, API‑based fees by default, and an optimizer that sweeps parameters across pairs and exports results.
 
 ## Install
 
@@ -10,11 +10,7 @@ pip install "psycopg[binary]" pyyaml loguru
 
 Python ≥ 3.10 recommended. Data is read from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
 
-Tip: snapshot exchange fees first for realistic results:
-
-```bash
-python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml
-```
+Tip: fees default to Binance API taker bps per symbol at run time (fallback 4.0 bps). You can still snapshot fees into DB if you prefer.
 
 ## Strategies (two‑sided)
 
@@ -48,7 +44,7 @@ Options
 - `--strategy`: `ema`, `bollinger`, `rsi`
 - Window: `--lookback` or `--start`/`--end`
 - Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
-  - Fees are dynamic by default: the backtester reads `exchange_fees` snapshots from DB and applies the fee in effect at each trade timestamp (taker by default). If no snapshots are present, it falls back to a constant `--fee-bps` (optional).
+  - Fees: by default, fetches current Binance USDT‑M taker bps via API per symbol at run time (fallback to `--fee-bps`, default 4.0 bps if API fails). You can override with `--fee-bps`.
 - EMA: `--fast`, `--slow`
 - Bollinger: `--bb-period`, `--bb-mult`
 - RSI: `--rsi-period`, `--rsi-entry`, `--rsi-exit`, `--rsi-ema`
@@ -118,8 +114,8 @@ Outputs
 
 ## Fees
 
-- Snapshots: Use `python -m qryptify_ingestor.fees_snapshot --config qryptify_ingestor/config.yaml` to snapshot current Binance USDT‑M maker/taker fee bps for all symbols in your config into the `exchange_fees` table.
-- Backtests/optimizer automatically load fee snapshots over the test window and apply the appropriate taker fee at each trade timestamp. If no snapshots are found, they fall back to a constant `--fee-bps` value.
+- Default: The backtester and optimizer fetch current Binance USDT‑M taker bps via API for each symbol and apply that fixed rate for the run (fallback 4.0 bps if API fails). Override with `--fee-bps`.
+- Optional: If you prefer time‑varying fees, you can implement your own snapshotting outside this repo; strategy tools in this repo use API bps by default.
 - Reports include `avg_fee_bps`, computed as total fees divided by the total entry+exit notional, scaled to bps.
 
 YAML example
