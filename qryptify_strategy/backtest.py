@@ -8,10 +8,7 @@ from .backtester import backtest
 from .models import Bar
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
-from .strategies.bollinger_ls import BollingerLongShortStrategy
 from .strategies.ema_crossover import EMACrossStrategy
-from .strategies.ema_crossover_ls import EMACrossLongShortStrategy
-from .strategies.rsi_ls import RSITwoSidedStrategy
 from .strategies.rsi_scalp import RSIScalpStrategy
 
 
@@ -56,12 +53,9 @@ def main() -> None:
                    required=True)
     p.add_argument(
         "--strategy",
-        choices=[
-            "ema", "ema_ls", "bollinger", "boll", "bb", "boll_ls", "rsi",
-            "rsi_mr", "rsi_ls"
-        ],
+        choices=["ema", "bollinger", "boll", "bb", "rsi", "rsi_mr"],
         default="ema",
-        help="Strategy: ema | ema_ls | bollinger | boll_ls | rsi | rsi_ls",
+        help="Strategy: ema | bollinger | rsi",
     )
     p.add_argument("--lookback",
                    type=int,
@@ -153,32 +147,19 @@ def main() -> None:
         strat_key = args.strategy
         if strat_key in ("boll", "bb"):
             strat_key = "bollinger"
+        if strat_key == "rsi_mr":
+            strat_key = "rsi"
 
         if strat_key == "ema":
             strategy = EMACrossStrategy(fast=args.fast, slow=args.slow)
-        elif strat_key == "ema_ls":
-            strategy = EMACrossLongShortStrategy(fast=args.fast,
-                                                 slow=args.slow)
         elif strat_key == "bollinger":
             strategy = BollingerBandStrategy(period=args.bb_period,
                                              mult=args.bb_mult)
-        elif strat_key == "boll_ls":
-            strategy = BollingerLongShortStrategy(period=args.bb_period,
-                                                  mult=args.bb_mult)
-        elif strat_key in ("rsi", "rsi_mr"):
+        elif strat_key == "rsi":
             strategy = RSIScalpStrategy(
                 rsi_period=args.rsi_period,
                 entry=args.rsi_entry,
                 exit=args.rsi_exit,
-                ema_filter=args.rsi_ema,
-            )
-        elif strat_key == "rsi_ls":
-            strategy = RSITwoSidedStrategy(
-                rsi_period=args.rsi_period,
-                entry_low=args.rsi_entry,
-                exit_low=args.rsi_exit,
-                entry_high=max(70.0, 100.0 - args.rsi_entry),
-                exit_high=min(55.0, 100.0 - args.rsi_exit),
                 ema_filter=args.rsi_ema,
             )
         else:

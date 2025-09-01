@@ -11,7 +11,7 @@ from ..strategy_utils import EMACrossCore
 
 @dataclass
 class EMACrossStrategy(Strategy):
-    """EMA crossover (long/flat), signals on close."""
+    """EMA crossover (long/short), signals on close."""
 
     fast: int = 50
     slow: int = 200
@@ -28,9 +28,8 @@ class EMACrossStrategy(Strategy):
         if res is None:
             return None
         crossed_up, crossed_dn = res
-
         if crossed_up:
             return Signal(target=+1, reason="fast_cross_above_slow")
         if crossed_dn:
-            return Signal(target=0, reason="fast_cross_below_slow")
+            return Signal(target=-1, reason="fast_cross_below_slow")
         return None
