@@ -51,10 +51,12 @@ def main() -> None:
     p.add_argument("--pair",
                    help="SYMBOL/interval like BTCUSDT/4h",
                    required=True)
-    p.add_argument("--strategy",
-                   choices=["ema", "bollinger", "boll", "bb", "rsi", "rsi_mr"],
-                   default="ema",
-                   help="Which strategy to run (ema|bollinger|rsi)")
+    p.add_argument(
+        "--strategy",
+        choices=["ema", "bollinger", "boll", "bb", "rsi", "rsi_mr"],
+        default="ema",
+        help="Strategy: ema | bollinger | rsi",
+    )
     p.add_argument("--lookback",
                    type=int,
                    help="fetch latest N bars",
@@ -145,13 +147,15 @@ def main() -> None:
         strat_key = args.strategy
         if strat_key in ("boll", "bb"):
             strat_key = "bollinger"
+        if strat_key == "rsi_mr":
+            strat_key = "rsi"
 
         if strat_key == "ema":
             strategy = EMACrossStrategy(fast=args.fast, slow=args.slow)
         elif strat_key == "bollinger":
             strategy = BollingerBandStrategy(period=args.bb_period,
                                              mult=args.bb_mult)
-        elif strat_key in ("rsi", "rsi_mr"):
+        elif strat_key == "rsi":
             strategy = RSIScalpStrategy(
                 rsi_period=args.rsi_period,
                 entry=args.rsi_entry,
