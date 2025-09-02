@@ -270,7 +270,14 @@ def backtest(
 
     span_sec = max((bars[-1].ts - bars[0].ts).total_seconds(), 1.0)
     years = span_sec / (365.25 * 24 * 3600)
-    cagr = (state.equity / risk.start_equity)**(1 / years) - 1 if years > 0 else None
+    # Avoid numerically unstable/meaningless annualization for very short windows (< 1 day)
+    if years >= (1.0 / 365.25):
+        try:
+            cagr = (state.equity / risk.start_equity)**(1 / years) - 1
+        except OverflowError:
+            cagr = None
+    else:
+        cagr = None
 
     peak = equity_series[0] if equity_series else risk.start_equity
     max_dd = 0.0

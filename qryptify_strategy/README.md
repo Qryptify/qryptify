@@ -45,6 +45,7 @@ Options
 - Window: `--lookback` or `--start`/`--end`
 - Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
   - Fees: fetches current Binance USDT‑M taker bps via API per symbol at run time (fallback to 4.0 bps if API fails). Override with `--fee-bps`.
+- Trailing stops: `--atr-trail` (multiplier), `--atr-trail-trigger` (MFE in ATRs before trailing activates)
 - EMA: `--fast`, `--slow`
 - Bollinger: `--bb-period`, `--bb-mult`
 - RSI: `--rsi-period`, `--rsi-entry`, `--rsi-exit`, `--rsi-ema`
@@ -57,7 +58,6 @@ Execution model
 - ATR sizing; orders respect lot step, min notional, and tick size
 - Fees: applied on both entry and exit notionals; summary shows total fees and effective avg bps
 - Flips close at next open then re‑enter opposite (two fees)
-- Advanced: ATR trailing stops supported via `RiskParams.atr_mult_trail` and `atr_trail_trigger_mult` (not exposed as CLI flags; set programmatically if needed)
 
 ## Optimizer
 

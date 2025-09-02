@@ -400,6 +400,8 @@ def main() -> None:
     import os
     rows_out: List[dict] = []
     md_lines: List[str] = ["# Optimizer Summary\n"]
+    # Keep all results per pair to avoid recomputing for --full-out later
+    all_results: List[Tuple[str, str, List[Result]]] = []
 
     for symbol, interval in pair_specs:
         repo = TimescaleRepo(dsn)
@@ -426,6 +428,8 @@ def main() -> None:
         if not results:
             print(f"\nNo results for {symbol} {interval} (check data or grids)")
             continue
+        # Save for potential full-grid export without recomputation
+        all_results.append((symbol, interval, results))
         best, ranked = choose_best(results, dd_cap, lam)
 
         print(f"\nSweep done for {symbol} {interval}")
@@ -559,23 +563,7 @@ def main() -> None:
             ]
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            # Recompute all results sequentially to include per-pair symbol/interval
-            for symbol, interval in pair_specs:
-                repo = TimescaleRepo(dsn)
-                repo.connect()
-                try:
-                    rows = repo.fetch_latest_n(symbol, interval, lookback)
-                finally:
-                    repo.close()
-                bars = build_bars(rows)
-                # Resolve fixed taker fee bps via API for this symbol
-                try:
-                    _, taker_bps = binance_futures_fee_bps(symbol)
-                    fee_bps_val = float(taker_bps)
-                except Exception:
-                    fee_bps_val = 4.0
-                res = eval_grid(symbol, interval, bars, strategy_list, fast_opts,
-                                slow_opts, risk_opts, atr_opts, fee_bps_val)
+            for symbol, interval, res in all_results:
                 for r in res:
                     writer.writerow({
                         "symbol": symbol,
@@ -589,6 +577,7 @@ def main() -> None:
                         "trades": r.trades,
                         "equity_end": round(r.equity_end, 2),
                         "cagr": round((r.cagr or 0.0) * 100, 2),
+                        "avg_fee_bps": round((r.avg_fee_bps or 0.0), 4),
                     })
         print(f"Saved full grid to {full_out}")
 

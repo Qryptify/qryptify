@@ -63,7 +63,7 @@ Highlights
 
 - Strategies: `ema`, `bollinger`, `rsi` (two‑sided)
 - Window: `--lookback` or `--start/--end`
-- Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
+- Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`, optional trailing `--atr-trail`, `--atr-trail-trigger`
 - Per‑strategy params as shown in examples
 - Fees: resolves taker bps per symbol from Binance API at run time (fallback 4.0 bps); override with `--fee-bps`
 - Execution model: signals on close; entries/exits at next open with slippage; stops can gap; sizing via ATR; optional lot/minNotional/tick constraints
