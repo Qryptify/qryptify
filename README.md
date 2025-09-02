@@ -1,40 +1,49 @@
 # Qryptify
 
-Two-part trading playground:
+Binance Futures data + strategy playground:
 
-- Ingestor: streams Binance Futures klines into TimescaleDB.
-- Strategy: backtests two‑sided strategies (long/short) on stored OHLCV and optimizes parameters.
+- Ingestor: backfills and streams closed klines into TimescaleDB with idempotent writes and resume pointers.
+- Strategy: simple, fast bar-close backtesting (two‑sided: long/short) with ATR sizing, exchange-like constraints, API‑based fees by default, and a parameter optimizer.
 
-This README gives a project overview. See component READMEs for details:
+See component READMEs for focused guides:
 
 - `qryptify_ingestor/README.md`
 - `qryptify_strategy/README.md`
 
 ## Quick Start
 
-Install Python deps and start TimescaleDB:
+1. Start TimescaleDB and auto‑init schema:
 
 ```bash
 docker compose up -d
+```
+
+2. Install Python deps (ingestor + strategy):
+
+```bash
 pip install "psycopg[binary]" pyyaml loguru httpx websockets tenacity pytz
 ```
 
-Edit pairs and DSN in `qryptify_ingestor/config.yaml`, then ingest:
+3. Configure pairs and DSN in `qryptify_ingestor/config.yaml`, then ingest and verify:
 
 ```bash
 python main.py
 ./verify_ingestion.sh
 ```
 
-Pair formats supported in config:
+Pair formats supported:
 
 - `SYMBOL/interval` (e.g., `BTCUSDT/1h`)
 - `SYMBOL-interval` (e.g., `ETHUSDT-4h`)
 - YAML objects `{symbol: SYMBOL, interval: INTERVAL}`
 
+Supported intervals: `1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h` (enforced in schema).
+
 ## Backtest (two‑sided)
 
-Examples (reads DSN from `qryptify_ingestor/config.yaml`):
+Reads OHLCV from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
+
+Examples
 
 ```bash
 # EMA 50/200 on 4h
@@ -50,14 +59,18 @@ python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookbac
   --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --slip-bps 1
 ```
 
-Key flags: `--pair`, `--strategy (ema|bollinger|rsi)`, `--lookback | --start/--end`, risk (`--equity --risk --atr --atr-mult --slip-bps`) and per‑strategy params.
-Fees default to the current Binance API taker bps per symbol at run time (fallback 4.0 bps or override via `--fee-bps`).
+Highlights
 
-Execution: signals on close; fills at next open (slippage). Stops can gap. ATR sizing; orders respect step/minNotional/tick.
+- Strategies: `ema`, `bollinger`, `rsi` (two‑sided)
+- Window: `--lookback` or `--start/--end`
+- Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
+- Per‑strategy params as shown in examples
+- Fees: resolves taker bps per symbol from Binance API at run time (fallback 4.0 bps); override with `--fee-bps`
+- Execution model: signals on close; entries/exits at next open with slippage; stops can gap; sizing via ATR; optional lot/minNotional/tick constraints
 
 ## Optimizer
 
-Sweep strategies/params across pairs and export:
+Sweep strategies and parameters across pairs and export results under `reports/`.
 
 ```bash
 # Single pair with Pareto CSVs and Markdown summary
@@ -75,16 +88,14 @@ python -m qryptify_strategy.optimize --config qryptify_ingestor/config.yaml \
   --out reports/optimizer_results.csv --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 ```
 
-Outputs under `reports/`:
+Outputs
 
 - Best‑per‑pair CSV (`optimizer_results.csv`)
-- Full grid CSV (`optimizer_full_grid.csv`)
-- Pareto CSVs per pair (maximize PnL, minimize DD)
-- Markdown summary with a Reproduce command per pair
+- Optional full grid CSV (`optimizer_full_grid.csv`)
+- Per‑pair Pareto frontier CSVs (maximize PnL, minimize DD)
+- Markdown summary with a runnable Reproduce command per pair
 
-Fee snapshots (optional if you want time‑varying fees):
-
-This repo no longer includes fee snapshot tooling or schema; strategy tools use API bps by default.
+Fees note: this repo does not maintain historical fee snapshots; strategy tools use API bps by default.
 
 ## Repo Map
 
@@ -92,20 +103,14 @@ This repo no longer includes fee snapshot tooling or schema; strategy tools use 
 - `qryptify_strategy/` — backtester, strategies, optimizer
 - `sql/` — Timescale schema (`001_init.sql`) and strategy tables (`002_strategy.sql`)
 
-## Notes
-
-- Keep `qryptify_ingestor/config.yaml` updated; both ingestor and strategy use its DSN.
-- Use `./verify_ingestion.sh` to validate DB health and candle coverage.
-
 ## Dev & Formatting
 
-This repo uses pre-commit with isort (google profile), YAPF, and Prettier.
+This repo uses pre-commit with isort (google), YAPF, and Prettier.
 
 ```bash
 pip install pre-commit
 pre-commit install
-# Format/lint everything
 pre-commit run -a
 ```
 
-If a hook modifies a file, run it again until it passes.
+Run hooks again if they modify files.

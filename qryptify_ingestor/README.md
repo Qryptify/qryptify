@@ -14,7 +14,7 @@ Binance Futures kline ingestor. Backfills historical data, streams closed candle
 - Python 3.10+
 - Docker (TimescaleDB via `docker-compose.yml`)
 
-Start TimescaleDB and create the schema:
+Start TimescaleDB and initialize schema:
 
 ```bash
 docker compose up -d
@@ -64,8 +64,7 @@ Flow
 
 - Backfills from the later of `backfill.start_date` or the last saved close per pair
 - Switches to live streaming and appends new closed candles
-- Ctrl+C to stop; resume pointers are saved in `sync_state`. A benign
-  `KeyboardInterrupt` trace from the WebSocket close may appear.
+- Ctrl+C to stop; resume pointers are saved in `sync_state` (a benign WebSocket close trace may appear)
 
 ## Verify
 
@@ -74,6 +73,8 @@ Flow
 ```
 
 Shows Timescale extension status, hypertables, table coverage per pair, resume pointers, and 1m lag.
+
+Tip: set `PG*` env vars (e.g., `PGPASSWORD`) to avoid prompts.
 
 ## Reset DB (clean slate)
 
@@ -98,13 +99,13 @@ Conventions: `symbol` uppercased; OHLCV stored as DOUBLE PRECISION for speed.
 - REST (`backfill_runner.py`): paginates `/fapi/v1/klines` from the resume pointer until near‑now
 - WebSocket (`live_runner.py`): subscribes per‑pair streams; writes only closed klines (`x = true`)
 - `timescale_repo.py`: thin, explicit Timescale access (connect/close, upsert, fetch, resume)
-- `coordinator.py`: orchestrates backfill then live; has retry on transient errors
+- `coordinator.py`: orchestrates backfill then live; retries on transient errors (tenacity)
 
 ## Fees
 
-This repo does not include a fee snapshot table or script anymore. Strategy tools fetch current taker bps from Binance’s API per symbol at run time (fallback 4.0 bps). If you want historical, time‑varying fees, manage that externally.
+This repo does not include a fee snapshot table or script. Strategy tools fetch current taker bps from Binance’s API per symbol at run time (fallback 4.0 bps). If you want historical, time‑varying fees, manage that externally.
 
 ## Using with qryptify_strategy
 
 - The backtester/optimizer reads the same DSN (`qryptify_ingestor/config.yaml`) to load OHLCV. Fees are resolved from API at run time.
-- You can pass the same YAML into the optimizer’s `--config` to iterate pairs/strategies and export results
+- You can pass the same YAML into the optimizer’s `--config` to iterate pairs/strategies and export results.
