@@ -1,6 +1,6 @@
 # Qryptify Strategy
 
-Simple, fast bar-close backtesting with two‑sided strategies (long/short), a small engine for ATR sizing, realistic exchange constraints, API‑based fees by default, and an optimizer that sweeps parameters across pairs and exports results.
+Simple, fast bar-close backtesting with two‑sided strategies (long/short), an engine for ATR sizing and realistic exchange constraints, API‑based fees by default, and an optimizer that sweeps parameters across pairs and exports results.
 
 ## Install
 
@@ -10,13 +10,13 @@ pip install "psycopg[binary]" pyyaml loguru
 
 Python ≥ 3.10 recommended. Data is read from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
 
-Tip: fees default to Binance API taker bps per symbol at run time (fallback 4.0 bps). You can still snapshot fees into DB if you prefer.
+Tip: fees default to Binance API taker bps per symbol at run time (fallback 4.0 bps). You can override via `--fee-bps` in the CLI.
 
 ## Strategies (two‑sided)
 
-- EMA crossover: long on fast>slow cross, short on fast<slow cross (`ema`).
-- Bollinger breakout: long on upper breakout, short on lower breakout; exits on midline crosses (`bollinger`).
-- RSI mean‑reversion: long on rebound from oversold; short on pullback from overbought; optional EMA filter (`rsi`).
+- EMA crossover (`ema`): long on fast>slow cross, short on fast<slow cross
+- Bollinger breakout (`bollinger`): long on upper breakout, short on lower breakout; exits on midline crosses
+- RSI mean‑reversion (`rsi`): long on rebound from oversold; short on pullback from overbought; optional EMA filter
 
 ## Backtest CLI
 
@@ -44,7 +44,8 @@ Options
 - `--strategy`: `ema`, `bollinger`, `rsi`
 - Window: `--lookback` or `--start`/`--end`
 - Risk: `--equity`, `--risk`, `--atr`, `--atr-mult`, `--slip-bps`
-  - Fees: by default, fetches current Binance USDT‑M taker bps via API per symbol at run time (fallback to `--fee-bps`, default 4.0 bps if API fails). You can override with `--fee-bps`.
+  - Fees: fetches current Binance USDT‑M taker bps via API per symbol at run time (fallback to 4.0 bps if API fails). Override with `--fee-bps`.
+- Trailing stops: `--atr-trail` (multiplier), `--atr-trail-trigger` (MFE in ATRs before trailing activates)
 - EMA: `--fast`, `--slow`
 - Bollinger: `--bb-period`, `--bb-mult`
 - RSI: `--rsi-period`, `--rsi-entry`, `--rsi-exit`, `--rsi-ema`
@@ -52,11 +53,11 @@ Options
 
 Execution model
 
-- Signals on close; fills at next open with slippage.
-- Stops may gap; gap‑through exits at open, otherwise at stop (both with slippage).
-- ATR sizing; orders respect lot step, min notional, and tick size.
-- Fees: applied on both entry and exit notionals; shows total fees and average effective bps in the report.
-- Flips close at next open then re‑enter opposite (two fees).
+- Signals on close; fills at next open with slippage
+- Stops may gap; gap‑through exits at open, otherwise at stop (both with slippage)
+- ATR sizing; orders respect lot step, min notional, and tick size
+- Fees: applied on both entry and exit notionals; summary shows total fees and effective avg bps
+- Flips close at next open then re‑enter opposite (two fees)
 
 ## Optimizer
 
@@ -115,7 +116,7 @@ Outputs
 ## Fees
 
 - Default: The backtester and optimizer fetch current Binance USDT‑M taker bps via API for each symbol and apply that fixed rate for the run (fallback 4.0 bps if API fails). Override with `--fee-bps`.
-- Optional: If you prefer time‑varying fees, you can implement your own snapshotting outside this repo; strategy tools in this repo use API bps by default.
+- Optional: If you prefer time‑varying fees, manage snapshots externally; strategy tools in this repo use API bps by default.
 - Reports include `avg_fee_bps`, computed as total fees divided by the total entry+exit notional, scaled to bps.
 
 YAML example

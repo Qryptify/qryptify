@@ -80,6 +80,18 @@ def main() -> None:
     p.add_argument("--risk", type=float, default=0.01)
     p.add_argument("--atr", type=int, default=14)
     p.add_argument("--atr-mult", type=float, default=2.0)
+    # Optional ATR trailing stop controls
+    p.add_argument("--atr-trail",
+                   type=float,
+                   default=0.0,
+                   help="ATR trailing stop multiple (>0 enables trailing)")
+    p.add_argument(
+        "--atr-trail-trigger",
+        type=float,
+        default=0.0,
+        help=
+        "MFE trigger in ATRs before trailing activates (0 to always trail if atr-trail>0)",
+    )
     p.add_argument(
         "--fee-bps",
         type=float,
@@ -160,6 +172,8 @@ def main() -> None:
             risk_per_trade=args.risk,
             atr_period=args.atr,
             atr_mult_stop=args.atr_mult,
+            atr_mult_trail=args.atr_trail,
+            atr_trail_trigger_mult=args.atr_trail_trigger,
             fee_bps=fee_bps_val,
             fee_lookup=None,
             slippage_bps=args.slip_bps,
