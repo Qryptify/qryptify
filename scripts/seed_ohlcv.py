@@ -16,10 +16,18 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 import math
+from pathlib import Path
 import random
+import sys
 from typing import List, Tuple
 
 import yaml
+
+# Ensure repository root is on sys.path so absolute imports work when running
+# this script via a file path (python scripts/seed_ohlcv.py)
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from qryptify_ingestor.config_utils import parse_pair
 from qryptify_ingestor.timescale_repo import TimescaleRepo
