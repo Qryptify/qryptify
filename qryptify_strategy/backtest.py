@@ -4,23 +4,16 @@ import argparse
 from datetime import datetime
 from typing import List
 
-from qryptify_ingestor.config_utils import parse_pair
+from qryptify.shared.config import load_cfg_dsn
+from qryptify.shared.fees import binance_futures_fee_bps
+from qryptify.shared.pairs import parse_pair
 
 from .backtester import backtest
-from .fees import binance_futures_fee_bps
 from .models import Bar
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
 from .strategies.rsi_scalp import RSIScalpStrategy
-
-
-def load_cfg_dsn(path: str = "qryptify_ingestor/config.yaml") -> str:
-    # Local import so --help works without pyyaml installed
-    import yaml  # type: ignore
-    with open(path, "r") as f:
-        cfg = yaml.safe_load(f)
-    return cfg["db"]["dsn"]
 
 
 def build_bars(rows: List[dict]) -> List[Bar]:

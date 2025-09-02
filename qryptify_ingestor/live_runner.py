@@ -5,7 +5,7 @@ from datetime import timezone
 
 from loguru import logger
 
-from qryptify_shared.time import to_dt
+from qryptify.shared.time import to_dt
 
 from .config_utils import symbol_interval_pairs_from_cfg
 

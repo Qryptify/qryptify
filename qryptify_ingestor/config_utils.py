@@ -1,64 +1,22 @@
+"""Backwards-compatible re-exports for pair parsing utilities.
+
+This module now delegates to qryptify.shared.pairs to keep imports stable
+for one release cycle.
+"""
+
 from __future__ import annotations
 
 from typing import List, Tuple
 
+from qryptify.shared.pairs import parse_pair as _parse_pair
+from qryptify.shared.pairs import symbol_interval_pairs_from_cfg as _pairs_from_cfg
+
 
 def parse_pair(pair: str) -> tuple[str, str]:
-    """Parse a single pair string into (SYMBOL, interval).
-
-    Accepts formats like "SYMBOL/interval" or "SYMBOL-interval".
-    Returns uppercased symbol and raw interval string.
-    Raises ValueError for invalid inputs.
-    """
-    s = str(pair or "").strip()
-    if not s:
-        raise ValueError("pair cannot be empty")
-    if "/" in s:
-        sym, itv = s.split("/", 1)
-    elif "-" in s:
-        sym, itv = s.split("-", 1)
-    else:
-        raise ValueError(
-            f"Invalid pair format '{s}'. Use SYMBOL/interval or SYMBOL-interval.")
-    sym = sym.strip().upper()
-    itv = itv.strip()
-    if not sym or not itv:
-        raise ValueError(f"Invalid pair format '{pair}'. Missing symbol or interval.")
-    return sym, itv
+    """Parse a single pair string into (SYMBOL, interval)."""
+    return _parse_pair(pair)
 
 
 def symbol_interval_pairs_from_cfg(cfg) -> List[Tuple[str, str]]:
-    """Return list of (symbol, interval) pairs from cfg['pairs'] only.
-
-    Supported formats per entry:
-      - "SYMBOL/interval" (e.g., "BTCUSDT/1m")
-      - "SYMBOL-interval" (e.g., "ETHUSDT-1h")
-      - {symbol: SYMBOL, interval: INTERVAL}
-    """
-    pairs = cfg.get("pairs")
-    if not pairs:
-        raise ValueError("config.yaml must define 'pairs' with symbol-interval entries")
-
-    out: list[tuple[str, str]] = []
-    for item in pairs:
-        if isinstance(item, str):
-            out.append(parse_pair(item))
-        elif isinstance(item, dict):
-            sym = str(item.get("symbol", "")).strip().upper()
-            itv = str(item.get("interval", "")).strip()
-            if not sym or not itv:
-                raise ValueError(
-                    f"Invalid pair entry {item}; expected keys 'symbol' and 'interval'."
-                )
-            out.append((sym, itv))
-        else:
-            raise ValueError(
-                f"Invalid pair entry type {type(item)}; expected str or {dict}")
-    # de-duplicate while preserving order
-    seen = set()
-    uniq: list[tuple[str, str]] = []
-    for p in out:
-        if p not in seen:
-            seen.add(p)
-            uniq.append(p)
-    return uniq
+    """Return list of (symbol, interval) pairs from cfg['pairs'] only."""
+    return _pairs_from_cfg(cfg)

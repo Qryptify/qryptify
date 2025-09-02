@@ -12,8 +12,9 @@ from typing import Dict
 
 from loguru import logger
 
-from qryptify_shared.time import to_dt
-from qryptify_shared.time import to_ms
+from qryptify.shared.intervals import step_of
+from qryptify.shared.time import to_dt
+from qryptify.shared.time import to_ms
 
 from .config_utils import symbol_interval_pairs_from_cfg
 
@@ -93,20 +94,3 @@ async def run_backfill(cfg: dict, repo, client) -> None:
 def max_dt(a: datetime, b: datetime) -> datetime:
     """Return the maximum of two datetimes."""
     return a if a >= b else b
-
-
-def step_of(interval: str) -> timedelta:
-    """Return the timedelta for a Binance kline interval string."""
-    table = {
-        "1m": timedelta(minutes=1),
-        "3m": timedelta(minutes=3),
-        "5m": timedelta(minutes=5),
-        "15m": timedelta(minutes=15),
-        "30m": timedelta(minutes=30),
-        "1h": timedelta(hours=1),
-        "2h": timedelta(hours=2),
-        "4h": timedelta(hours=4),
-    }
-    if interval not in table:
-        raise ValueError(f"Unsupported interval: {interval}")
-    return table[interval]

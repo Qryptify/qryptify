@@ -7,12 +7,12 @@ from typing import Iterable, List, Optional, Tuple
 
 import yaml
 
-from qryptify_ingestor.config_utils import parse_pair
+from qryptify.shared.config import load_cfg_dsn
+from qryptify.shared.fees import binance_futures_fee_bps
+from qryptify.shared.pairs import parse_pair
 
 from .backtest import build_bars
-from .backtest import load_cfg_dsn
 from .backtester import backtest
-from .fees import binance_futures_fee_bps
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
