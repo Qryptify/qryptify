@@ -115,7 +115,7 @@ def main() -> None:
     symbol, interval = parse_pair(args.pair)
 
     # Local import so --help works without loguru/psycopg until run
-    from qryptify_ingestor.timescale_repo import TimescaleRepo  # type: ignore
+    from qryptify.data.timescale import TimescaleRepo  # type: ignore
     dsn = load_cfg_dsn()
     repo = TimescaleRepo(dsn)
     repo.connect()

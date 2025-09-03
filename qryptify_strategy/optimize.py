@@ -393,7 +393,7 @@ def main() -> None:
     pareto_dir = cfg.get("pareto_dir", args.pareto_dir)
     md_out = cfg.get("md_out", args.md_out)
 
-    from qryptify_ingestor.timescale_repo import TimescaleRepo  # late import
+    from qryptify.data.timescale import TimescaleRepo
     dsn = load_cfg_dsn()
 
     import csv

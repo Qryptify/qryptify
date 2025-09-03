@@ -28,9 +28,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from qryptify.data.timescale import TimescaleRepo
 from qryptify.shared.intervals import step_of
 from qryptify.shared.pairs import parse_pair
-from qryptify_ingestor.timescale_repo import TimescaleRepo
 
 
 def _default_dsn() -> str:

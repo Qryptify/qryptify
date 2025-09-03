@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Iterable, Optional
 
@@ -9,19 +10,12 @@ from psycopg.rows import dict_row
 
 
 class TimescaleRepo:
-    """Thin TimescaleDB repository focused on clarity and safety.
-
-    - Provides explicit `connect()` / `close()` as well as context-manager usage.
-    - Ensures UTC at the session level.
-    - Uses short-lived cursors and transaction boundaries per operation.
-    - Rolls back on error and re-raises to let callers handle retries.
-    """
+    """Thin TimescaleDB repository focused on clarity and safety."""
 
     def __init__(self, dsn: str):
         self._dsn = dsn
         self._conn: Optional[psycopg.Connection] = None
 
-    # Context manager helpers -------------------------------------------------
     def __enter__(self) -> "TimescaleRepo":
         self.connect()
         return self
@@ -29,12 +23,10 @@ class TimescaleRepo:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    # Lifecycle ---------------------------------------------------------------
     def connect(self) -> None:
         if self._conn is not None:
             return
         conn = psycopg.connect(self._dsn, autocommit=False)
-        # Ensure dict rows for all cursors, and UTC timestamps
         conn.row_factory = dict_row
         conn.execute("SET TIME ZONE 'UTC'")
         self._conn = conn
@@ -48,18 +40,12 @@ class TimescaleRepo:
             finally:
                 self._conn = None
 
-    # Query helpers -----------------------------------------------------------
     def _require_conn(self) -> psycopg.Connection:
         if self._conn is None:
             raise RuntimeError("TimescaleRepo.connect() must be called before use")
         return self._conn
 
-    # Operations --------------------------------------------------------------
     def upsert_klines(self, rows: Iterable[dict]) -> int:
-        """Insert klines idempotently. Returns number of inserted rows.
-
-        Accepts an iterable of dictionaries with keys matching column names.
-        """
         conn = self._require_conn()
         sql = (
             "INSERT INTO candlesticks (\n"
@@ -70,7 +56,6 @@ class TimescaleRepo:
             "  %(quote_asset_volume)s, %(number_of_trades)s, %(taker_buy_base)s, %(taker_buy_quote)s\n"
             ")\n"
             "ON CONFLICT (symbol, interval, ts) DO NOTHING")
-        # Materialize rows to allow len/rowcount semantics predictably
         batch = list(rows)
         if not batch:
             return 0
@@ -84,7 +69,6 @@ class TimescaleRepo:
             conn.rollback()
             raise
 
-    # Reads ------------------------------------------------------------------
     def fetch_ohlcv(
         self,
         symbol: str,
@@ -93,10 +77,6 @@ class TimescaleRepo:
         end: Optional[datetime] = None,
         limit: Optional[int] = None,
     ) -> list[dict]:
-        """Fetch OHLCV rows as a list of dicts ordered by ts ASC.
-
-        Provides a thin, dependency-free access layer for strategy/backtest use.
-        """
         conn = self._require_conn()
         clauses = ["symbol=%s", "interval=%s"]
         params: list[object] = [symbol, interval]
@@ -119,11 +99,9 @@ class TimescaleRepo:
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall() or []
-        # row_factory=dict_row already, so rows are dicts
         return list(rows)
 
     def fetch_latest_n(self, symbol: str, interval: str, n: int) -> list[dict]:
-        """Fetch latest N bars ordered ASC (oldest first)."""
         conn = self._require_conn()
         with conn.cursor() as cur:
             cur.execute(
@@ -165,4 +143,41 @@ class TimescaleRepo:
             conn.rollback()
             raise
 
-    # (fee snapshot APIs removed; strategy uses API bps)
+
+class AsyncTimescaleRepo:
+    """Async facade that wraps TimescaleRepo and offloads work to threads."""
+
+    def __init__(self, dsn: str):
+        self._inner = TimescaleRepo(dsn)
+
+    async def connect(self) -> None:
+        await asyncio.to_thread(self._inner.connect)
+
+    def close(self) -> None:
+        self._inner.close()
+
+    async def upsert_klines_async(self, rows: Iterable[dict]) -> int:
+        return await asyncio.to_thread(self._inner.upsert_klines, rows)
+
+    async def set_last_closed_ts_async(self, symbol: str, interval: str,
+                                       ts: datetime) -> None:
+        await asyncio.to_thread(self._inner.set_last_closed_ts, symbol, interval, ts)
+
+    async def fetch_ohlcv_async(
+        self,
+        symbol: str,
+        interval: str,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        limit: Optional[int] = None,
+    ) -> list[dict]:
+        return await asyncio.to_thread(self._inner.fetch_ohlcv, symbol, interval, start,
+                                       end, limit)
+
+    async def fetch_latest_n_async(self, symbol: str, interval: str,
+                                   n: int) -> list[dict]:
+        return await asyncio.to_thread(self._inner.fetch_latest_n, symbol, interval, n)
+
+    async def get_last_closed_ts_async(self, symbol: str,
+                                       interval: str) -> Optional[datetime]:
+        return await asyncio.to_thread(self._inner.get_last_closed_ts, symbol, interval)

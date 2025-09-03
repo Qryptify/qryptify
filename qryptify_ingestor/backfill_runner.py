@@ -13,10 +13,9 @@ from typing import Dict
 from loguru import logger
 
 from qryptify.shared.intervals import step_of
+from qryptify.shared.pairs import symbol_interval_pairs_from_cfg
 from qryptify.shared.time import to_dt
 from qryptify.shared.time import to_ms
-
-from .config_utils import symbol_interval_pairs_from_cfg
 
 
 def _parse_kline(symbol: str, interval: str, arr: list) -> Dict:
