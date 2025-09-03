@@ -18,16 +18,16 @@ See component READMEs for focused guides:
 docker compose up -d
 ```
 
-2. Install Python deps (ingestor + strategy):
+2. Install the package in editable mode (provides console scripts and dependencies):
 
 ```bash
-pip install "psycopg[binary]" pyyaml loguru httpx websockets tenacity pytz
+python -m pip install -e .
 ```
 
 3. Configure pairs and DSN in `qryptify_ingestor/config.yaml`, then ingest and verify:
 
 ```bash
-python main.py
+qryptify-ingest   # or: python main.py
 ./verify_ingestion.sh
 ```
 
@@ -43,19 +43,19 @@ Supported intervals: `1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h` (enforced in schema).
 
 Reads OHLCV from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
 
-Examples
+Examples (use console scripts or the Python module)
 
 ```bash
 # EMA 50/200 on 4h
-python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback 100000 \
+qryptify-backtest --pair BTCUSDT/4h --strategy ema --lookback 100000 \
   --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
 
 # Bollinger 50 × 3.0 on 1h
-python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy bollinger --lookback 100000 \
+qryptify-backtest --pair BTCUSDT/1h --strategy bollinger --lookback 100000 \
   --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --slip-bps 1
 
 # RSI with EMA filter on 15m
-python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
+qryptify-backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
   --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --slip-bps 1
 ```
 
@@ -74,7 +74,7 @@ Sweep strategies and parameters across pairs and export results under `reports/`
 
 ```bash
 # Single pair with Pareto CSVs and Markdown summary
-python -m qryptify_strategy.optimize --pair BTCUSDT/1h \
+qryptify-optimize --pair BTCUSDT/1h \
   --lookback 100000 --strategies ema,bollinger,rsi \
   --fast 10,20,30,50 --slow 50,100,200 \
   --risk 0.003,0.005,0.01 --atr-mult 2.0,2.5,3.0 \
@@ -84,7 +84,7 @@ python -m qryptify_strategy.optimize --pair BTCUSDT/1h \
   --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 
 # Or drive via YAML (pairs, strategies, grids, overrides)
-python -m qryptify_strategy.optimize --config qryptify_ingestor/config.yaml \
+qryptify-optimize --config qryptify_ingestor/config.yaml \
   --out reports/optimizer_results.csv --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 ```
 
@@ -114,3 +114,26 @@ pre-commit run -a
 ```
 
 Run hooks again if they modify files.
+
+### Local Dev Tips
+
+- Install in editable mode so scripts and package imports work seamlessly:
+
+```bash
+python -m pip install -e .
+```
+
+- Lint, type-check, and test (using this env’s Python):
+
+```bash
+python -m ruff check .
+python -m mypy --explicit-package-bases --module qryptify --module qryptify_ingestor --module qryptify_strategy
+python -m pytest -q
+```
+
+- Optional live buffering: add to `qryptify_ingestor/config.yaml` to batch live upserts (default is 1):
+
+```yaml
+live:
+  buffer_max: 10
+```

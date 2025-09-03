@@ -4,8 +4,10 @@ Simple, fast bar-close backtesting with two‑sided strategies (long/short), an 
 
 ## Install
 
+Install the package in editable mode (includes dependencies and console scripts):
+
 ```bash
-pip install "psycopg[binary]" pyyaml loguru
+python -m pip install -e .
 ```
 
 Python ≥ 3.10 recommended. Data is read from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
@@ -22,19 +24,19 @@ Tip: fees default to Binance API taker bps per symbol at run time (fallback 4.0 
 
 Reads OHLCV from TimescaleDB using the DSN in `qryptify_ingestor/config.yaml`.
 
-Examples
+Examples (use console script or module form)
 
 ```bash
 # EMA 50/200 on 4h (two‑sided)
-python -m qryptify_strategy.backtest --pair BTCUSDT/4h --strategy ema --lookback 1000000 \
+qryptify-backtest --pair BTCUSDT/4h --strategy ema --lookback 1000000 \
   --fast 50 --slow 200 --equity 10000 --risk 0.01 --atr 14 --atr-mult 2.0
 
 # Bollinger 50 × 3.0 on 1h (two‑sided)
-python -m qryptify_strategy.backtest --pair BTCUSDT/1h --strategy bollinger --lookback 1000000 \
+qryptify-backtest --pair BTCUSDT/1h --strategy bollinger --lookback 1000000 \
   --bb-period 50 --bb-mult 3.0 --equity 10000 --risk 0.005 --atr 14 --atr-mult 2.0 --slip-bps 1
 
 # RSI on 15m (two‑sided) with EMA filter
-python -m qryptify_strategy.backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
+qryptify-backtest --pair BTCUSDT/15m --strategy rsi --lookback 100000 \
   --rsi-period 14 --rsi-entry 30 --rsi-exit 55 --rsi-ema 200 --equity 10000 --risk 0.005 --atr 14 --atr-mult 3.0 --slip-bps 1
 ```
 
@@ -58,6 +60,7 @@ Execution model
 - ATR sizing; orders respect lot step, min notional, and tick size
 - Fees: applied on both entry and exit notionals; summary shows total fees and effective avg bps
 - Flips close at next open then re‑enter opposite (two fees)
+- Optional JSON output: add `--json-out PATH` to save report + last trades.
 
 ## Optimizer
 
@@ -67,7 +70,7 @@ Quick start
 
 ```bash
 # Single pair (BTC 1h), sweep all strategies
-python -m qryptify_strategy.optimize --pair BTCUSDT/1h \
+qryptify-optimize --pair BTCUSDT/1h \
   --lookback 1000000 --strategies ema,bollinger,rsi \
   --fast 10,20,30,50 --slow 50,100,200 \
   --risk 0.003,0.005,0.01 --atr-mult 2.0,2.5,3.0 \
@@ -76,7 +79,7 @@ python -m qryptify_strategy.optimize --pair BTCUSDT/1h \
   --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 
 # Multiple pairs; also save the full grid for all pairs
-python -m qryptify_strategy.optimize --pairs BTCUSDT/1h,ETHUSDT/4h,BNBUSDT/4h \
+qryptify-optimize --pairs BTCUSDT/1h,ETHUSDT/4h,BNBUSDT/4h \
   --lookback 1000000 --strategies ema,bollinger,rsi \
   --fast 10,20,30,50 --slow 50,100,200 \
   --risk 0.003,0.005,0.01 --atr-mult 2.0,2.5,3.0 \
@@ -86,7 +89,7 @@ python -m qryptify_strategy.optimize --pairs BTCUSDT/1h,ETHUSDT/4h,BNBUSDT/4h \
   --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 
 # Use YAML config (reads pairs/strategies/grids and overrides)
-python -m qryptify_strategy.optimize --config qryptify_ingestor/config.yaml \
+qryptify-optimize --config qryptify_ingestor/config.yaml \
   --out reports/optimizer_results.csv --pareto-dir reports/pareto --md-out reports/optimizer_summary.md
 ```
 
