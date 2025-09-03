@@ -9,6 +9,7 @@ import yaml
 
 from qryptify.shared.config import load_cfg_dsn
 from qryptify.shared.fees import binance_futures_fee_bps
+from qryptify.shared.logging import setup_logging
 from qryptify.shared.pairs import parse_pair
 
 from .backtest import build_bars
@@ -257,6 +258,10 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result, lookback: int)
 
 
 def main() -> None:
+    try:
+        setup_logging("INFO")
+    except Exception:
+        pass
     p = argparse.ArgumentParser(description="Parameter sweep optimizer")
     p.add_argument("--pair", help="SYMBOL/interval, e.g., BTCUSDT/1h (single)")
     p.add_argument("--config", default="", help="YAML with pairs/strategies/grids")

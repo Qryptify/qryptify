@@ -80,7 +80,16 @@ class BinanceClient:
                 continue
 
 
-async def _ws_reconnect(url: str, initial_ms: int = 500, max_ms: int = 8000):
+async def _ws_reconnect(url: str,
+                        initial_ms: int = 500,
+                        max_ms: int = 8000,
+                        *,
+                        jitter: bool = False):
+    """Reconnect loop with optional jittered exponential backoff.
+
+    Behavior is unchanged by default (no jitter). When jitter=True, a random
+    +/- 20% jitter is applied to the sleep duration to avoid thundering herd.
+    """
     backoff = initial_ms
     while True:
         try:
@@ -88,7 +97,17 @@ async def _ws_reconnect(url: str, initial_ms: int = 500, max_ms: int = 8000):
                 yield ws
                 backoff = initial_ms  # reset after a clean session
         except Exception:
-            logger.warning(f"WebSocket connect error; retry in {backoff} ms")
-            await asyncio.sleep(backoff / 1000)
+            delay = backoff
+            if jitter:
+                try:
+                    import random
+
+                    # +/- 20% jitter
+                    jitter_mult = 1.0 + random.uniform(-0.2, 0.2)
+                    delay = int(max(1, delay * jitter_mult))
+                except Exception:
+                    pass
+            logger.warning(f"WebSocket connect error; retry in {delay} ms")
+            await asyncio.sleep(delay / 1000)
             backoff = min(backoff * 2, max_ms)
             continue

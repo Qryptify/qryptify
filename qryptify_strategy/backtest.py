@@ -6,6 +6,7 @@ from typing import List
 
 from qryptify.shared.config import load_cfg_dsn
 from qryptify.shared.fees import binance_futures_fee_bps
+from qryptify.shared.logging import setup_logging
 from qryptify.shared.pairs import parse_pair
 
 from .backtester import backtest
@@ -32,6 +33,11 @@ def build_bars(rows: List[dict]) -> List[Bar]:
 
 
 def main() -> None:
+    # Standardize logging format (stdout printing remains unchanged below)
+    try:
+        setup_logging("INFO")
+    except Exception:
+        pass
     p = argparse.ArgumentParser(description="Backtest strategies on stored OHLCV")
     p.add_argument("--pair", help="SYMBOL/interval like BTCUSDT/4h", required=True)
     p.add_argument(
@@ -110,6 +116,11 @@ def main() -> None:
                    type=float,
                    default=0.0,
                    help="Price tick size for stop rounding (0 to ignore)")
+    p.add_argument(
+        "--json-out",
+        default="",
+        help="Optional path to write a JSON summary (report + last trades)",
+    )
     args = p.parse_args()
 
     symbol, interval = parse_pair(args.pair)
@@ -202,6 +213,45 @@ def main() -> None:
                 print(
                     f"  {t.entry_ts.isoformat()} -> {t.exit_ts.isoformat()} | qty={t.qty:.6f} entry={t.entry_price:.2f} exit={t.exit_price:.2f} pnl={t.pnl:.2f} reason={t.reason}"
                 )
+
+        # Optional JSON output for machine consumption
+        if args.json_out:
+            try:
+                import json
+                out = {
+                    "report": {
+                        "symbol": report.symbol,
+                        "interval": report.interval,
+                        "bars": report.bars,
+                        "trades": report.trades,
+                        "total_pnl": report.total_pnl,
+                        "total_fees": report.total_fees,
+                        "equity_end": report.equity_end,
+                        "max_drawdown": report.max_drawdown,
+                        "win_rate": report.win_rate,
+                        "avg_win": report.avg_win,
+                        "avg_loss": report.avg_loss,
+                        "cagr": report.cagr,
+                        "avg_fee_bps": report.avg_fee_bps,
+                        "fee_model": report.fee_model,
+                    },
+                    "last_trades": [{
+                        "entry_ts": t.entry_ts.isoformat(),
+                        "exit_ts": t.exit_ts.isoformat(),
+                        "entry_price": t.entry_price,
+                        "exit_price": t.exit_price,
+                        "qty": t.qty,
+                        "pnl": t.pnl,
+                        "fees": t.fees,
+                        "reason": t.reason,
+                    } for t in last],
+                }
+                with open(args.json_out, "w") as f:
+                    json.dump(out, f, indent=2)
+                print(f"Saved JSON summary to {args.json_out}")
+            except Exception:
+                # Do not fail the run due to JSON write issues
+                pass
     finally:
         repo.close()
 

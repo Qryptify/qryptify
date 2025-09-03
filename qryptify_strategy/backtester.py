@@ -45,7 +45,7 @@ def _fee_bps_at(risk: RiskParams, ts: datetime) -> float:
 
 def _price_with_slippage(price: float, bps: float, side: str) -> float:
     adj = price * (bps / 10_000.0)
-    if side.upper() == "BUY":
+    if side.upper() == SIDE_BUY:
         return price + adj
     else:
         return price - adj
@@ -169,20 +169,21 @@ def backtest(
                 if bar.open <= stop_px:
                     exit_reason = "stop_gap"
                     exit_price = _price_with_slippage(bar.open, risk.slippage_bps,
-                                                      "SELL")
+                                                      SIDE_SELL)
                 elif bar.low <= stop_px:
                     exit_reason = "stop"
                     exit_price = _price_with_slippage(stop_px, risk.slippage_bps,
-                                                      "SELL")
+                                                      SIDE_SELL)
             else:
                 # Short stop
                 if bar.open >= stop_px:
                     exit_reason = "stop_gap"
                     exit_price = _price_with_slippage(bar.open, risk.slippage_bps,
-                                                      "BUY")
+                                                      SIDE_BUY)
                 elif bar.high >= stop_px:
                     exit_reason = "stop"
-                    exit_price = _price_with_slippage(stop_px, risk.slippage_bps, "BUY")
+                    exit_price = _price_with_slippage(stop_px, risk.slippage_bps,
+                                                      SIDE_BUY)
 
         next_open_price = bars[i + 1].open if (i + 1) < len(bars) else None
 
@@ -199,7 +200,7 @@ def backtest(
             if desired != cur_sign and state.position_qty != 0:
                 px_exit = _price_with_slippage(
                     next_open_price, risk.slippage_bps,
-                    "SELL" if state.position_qty > 0 else "BUY")
+                    SIDE_SELL if state.position_qty > 0 else SIDE_BUY)
                 trades.append(
                     _close_position(state, bars, i, bars[i + 1].ts, px_exit, risk,
                                     sig.reason or "signal_exit"))
@@ -207,7 +208,7 @@ def backtest(
             # Then, enter if desired is non-flat and we are currently flat
             if desired != 0 and state.position_qty == 0 and atr is not None:
                 px_entry = _price_with_slippage(next_open_price, risk.slippage_bps,
-                                                "BUY" if desired > 0 else "SELL")
+                                                SIDE_BUY if desired > 0 else SIDE_SELL)
                 risk_cash = state.equity * risk.risk_per_trade
                 stop_dist = atr * risk.atr_mult_stop
                 if stop_dist <= 0:
@@ -249,7 +250,7 @@ def backtest(
 
     if state.position_qty != 0 and bars:
         last_bar = bars[-1]
-        side = "SELL" if state.position_qty > 0 else "BUY"
+        side = SIDE_SELL if state.position_qty > 0 else SIDE_BUY
         px = _price_with_slippage(last_bar.close, risk.slippage_bps, side)
         trades.append(
             _close_position(state, bars,
@@ -306,3 +307,7 @@ def backtest(
     )
     strategy.on_finish()
     return rpt, trades
+
+
+SIDE_BUY = "BUY"
+SIDE_SELL = "SELL"

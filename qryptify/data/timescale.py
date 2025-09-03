@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Iterable, Optional
 
 from loguru import logger
 import psycopg
 from psycopg.rows import dict_row
+
+from .interfaces import KlineRow
 
 
 class TimescaleRepo:
@@ -45,7 +48,7 @@ class TimescaleRepo:
             raise RuntimeError("TimescaleRepo.connect() must be called before use")
         return self._conn
 
-    def upsert_klines(self, rows: Iterable[dict]) -> int:
+    def upsert_klines(self, rows: Iterable[KlineRow]) -> int:
         conn = self._require_conn()
         sql = (
             "INSERT INTO candlesticks (\n"
@@ -156,7 +159,7 @@ class AsyncTimescaleRepo:
     def close(self) -> None:
         self._inner.close()
 
-    async def upsert_klines_async(self, rows: Iterable[dict]) -> int:
+    async def upsert_klines_async(self, rows: Iterable[KlineRow]) -> int:
         return await asyncio.to_thread(self._inner.upsert_klines, rows)
 
     async def set_last_closed_ts_async(self, symbol: str, interval: str,
@@ -181,3 +184,14 @@ class AsyncTimescaleRepo:
     async def get_last_closed_ts_async(self, symbol: str,
                                        interval: str) -> Optional[datetime]:
         return await asyncio.to_thread(self._inner.get_last_closed_ts, symbol, interval)
+
+
+@contextmanager
+def with_timescale(dsn: str):
+    """Context manager for TimescaleRepo with safe connect/close."""
+    repo = TimescaleRepo(dsn)
+    repo.connect()
+    try:
+        yield repo
+    finally:
+        repo.close()
