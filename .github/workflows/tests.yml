@@ -29,6 +29,9 @@ jobs:
         run: ruff check .
       - name: Run mypy (type check)
         run: |
-          mypy qryptify qryptify_ingestor qryptify_strategy
+          python -m mypy --explicit-package-bases \
+            --module qryptify \
+            --module qryptify_ingestor \
+            --module qryptify_strategy
       - name: Run tests
         run: pytest -q
