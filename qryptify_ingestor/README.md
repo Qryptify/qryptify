@@ -98,7 +98,7 @@ Conventions: `symbol` uppercased; OHLCV stored as DOUBLE PRECISION for speed.
 
 - REST (`backfill_runner.py`): paginates `/fapi/v1/klines` from the resume pointer until near‑now
 - WebSocket (`live_runner.py`): subscribes per‑pair streams; writes only closed klines (`x = true`)
-- `timescale_repo.py`: thin, explicit Timescale access (connect/close, upsert, fetch, resume)
+- Timescale access: `qryptify/data/timescale.py` (`TimescaleRepo`, `AsyncTimescaleRepo`)
 - `coordinator.py`: orchestrates backfill then live; retries on transient errors (tenacity)
 
 ## Fees

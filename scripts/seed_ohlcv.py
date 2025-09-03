@@ -13,25 +13,16 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
-from datetime import timedelta
 from datetime import timezone
 import math
-from pathlib import Path
 import random
-import sys
-from typing import List, Tuple
+from typing import List
 
 import yaml
 
-# Ensure repository root is on sys.path so absolute imports work when running
-# this script via a file path (python scripts/seed_ohlcv.py)
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from qryptify_ingestor.config_utils import parse_pair
-from qryptify_ingestor.timescale_repo import TimescaleRepo
-from qryptify_shared.time import to_dt
+from qryptify.data.timescale import TimescaleRepo
+from qryptify.shared.intervals import step_of
+from qryptify.shared.pairs import parse_pair
 
 
 def _default_dsn() -> str:
@@ -43,19 +34,10 @@ def _default_dsn() -> str:
 def _gen_rows(symbol: str, interval: str, rows: int) -> List[dict]:
     now = datetime.now(timezone.utc)
     # Choose step by interval string
-    step_map = {
-        "1m": timedelta(minutes=1),
-        "3m": timedelta(minutes=3),
-        "5m": timedelta(minutes=5),
-        "15m": timedelta(minutes=15),
-        "30m": timedelta(minutes=30),
-        "1h": timedelta(hours=1),
-        "2h": timedelta(hours=2),
-        "4h": timedelta(hours=4),
-    }
-    if interval not in step_map:
-        raise SystemExit(f"Unsupported interval for seed: {interval}")
-    step = step_map[interval]
+    try:
+        step = step_of(interval)
+    except Exception as e:
+        raise SystemExit(f"Unsupported interval for seed: {interval}") from e
 
     # Start some time ago so bars are in the past
     start = now - step * (rows + 5)

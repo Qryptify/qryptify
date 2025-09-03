@@ -1,19 +1,19 @@
 import asyncio
 
 from loguru import logger
-import yaml
 
+from qryptify.shared.config import load_cfg_validated
+from qryptify.shared.logging import setup_logging
 from qryptify_ingestor.coordinator import run_all
 
 
-def load_cfg() -> dict:
-    """Load YAML config used by ingestor and strategy components."""
-    with open("qryptify_ingestor/config.yaml", "r") as f:
-        return yaml.safe_load(f) or {}
-
-
-if __name__ == "__main__":
-    cfg = load_cfg()
+def main() -> None:
+    setup_logging("INFO")
+    cfg = load_cfg_validated()
     pairs = cfg.get("pairs")
     logger.info(f"Starting Qryptify Ingestor | pairs={pairs}")
     asyncio.run(run_all(cfg))
+
+
+if __name__ == "__main__":
+    main()

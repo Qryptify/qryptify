@@ -24,12 +24,12 @@ def _bars_series():
         (100.3, 100.6, 100.2, 100.4),  # i=3
         (101.0, 101.1, 100.9, 101.0),  # i=4
     ]
-    for i, (o, h, l, c) in enumerate(prices):
+    for i, (o, h, lo, c) in enumerate(prices):
         bars.append(
             Bar(ts=base + timedelta(minutes=i),
                 open=o,
                 high=h,
-                low=l,
+                low=lo,
                 close=c,
                 volume=0.0))
     return bars

@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qryptify"
+version = "0.1.0"
+description = "Binance Futures data ingestor + strategy playground (TimescaleDB)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Qryptify Maintainers" }
+]
+dependencies = [
+  "psycopg[binary]",
+  "pyyaml",
+  "loguru",
+  "httpx",
+  "websockets",
+  "tenacity",
+  "pytz",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "mypy",
+]
+
+[project.scripts]
+qryptify-ingest = "main:main"
+qryptify-backtest = "qryptify_strategy.backtest:main"
+qryptify-optimize = "qryptify_strategy.optimize:main"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "qryptify",
+  "qryptify_ingestor",
+  "qryptify_strategy",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "qryptify/**",
+  "qryptify_ingestor/**",
+  "qryptify_strategy/**",
+  "scripts/**",
+  "sql/**",
+  "README.md",
+  ".pre-commit-config.yaml",
+  "docker-compose.yml",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+  "node_modules",
+  ".git",
+  ".ruff_cache",
+  ".pytest_cache",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+pretty = true
+show_error_codes = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_no_return = false
+disallow_untyped_defs = false
+check_untyped_defs = true

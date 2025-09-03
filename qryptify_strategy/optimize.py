@@ -7,12 +7,13 @@ from typing import Iterable, List, Optional, Tuple
 
 import yaml
 
-from qryptify_ingestor.config_utils import parse_pair
+from qryptify.shared.config import load_cfg_dsn
+from qryptify.shared.fees import binance_futures_fee_bps
+from qryptify.shared.logging import setup_logging
+from qryptify.shared.pairs import parse_pair
 
 from .backtest import build_bars
-from .backtest import load_cfg_dsn
 from .backtester import backtest
-from .fees import binance_futures_fee_bps
 from .models import RiskParams
 from .strategies.bollinger import BollingerBandStrategy
 from .strategies.ema_crossover import EMACrossStrategy
@@ -257,6 +258,10 @@ def _build_backtest_cmd(symbol: str, interval: str, best: Result, lookback: int)
 
 
 def main() -> None:
+    try:
+        setup_logging("INFO")
+    except Exception:
+        pass
     p = argparse.ArgumentParser(description="Parameter sweep optimizer")
     p.add_argument("--pair", help="SYMBOL/interval, e.g., BTCUSDT/1h (single)")
     p.add_argument("--config", default="", help="YAML with pairs/strategies/grids")
@@ -391,9 +396,10 @@ def main() -> None:
     out_path = cfg.get("out", args.out)
     full_out = cfg.get("full_out", args.full_out)
     pareto_dir = cfg.get("pareto_dir", args.pareto_dir)
-    md_out = cfg.get("md_out", args.md_out)
+    # Normalize md_out from config/CLI for downstream write below
+    args.md_out = cfg.get("md_out", args.md_out)
 
-    from qryptify_ingestor.timescale_repo import TimescaleRepo  # late import
+    from qryptify.data.timescale import TimescaleRepo
     dsn = load_cfg_dsn()
 
     import csv
