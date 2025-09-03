@@ -34,4 +34,4 @@ jobs:
             --module qryptify_ingestor \
             --module qryptify_strategy
       - name: Run tests
-        run: pytest -q
+        run: python -m pytest
