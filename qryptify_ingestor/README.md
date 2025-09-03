@@ -24,8 +24,10 @@ The `sql/001_init.sql` initializes the hypertable (`candlesticks`) and resume ta
 
 ## Install
 
+Install the package in editable mode (includes dependencies and console scripts):
+
 ```bash
-pip install httpx websockets pyyaml "psycopg[binary]" tenacity pytz loguru
+python -m pip install -e .
 ```
 
 ## Configure
@@ -57,7 +59,7 @@ Notes
 ## Run
 
 ```bash
-python main.py
+qryptify-ingest   # or: python main.py
 ```
 
 Flow
@@ -65,6 +67,7 @@ Flow
 - Backfills from the later of `backfill.start_date` or the last saved close per pair
 - Switches to live streaming and appends new closed candles
 - Ctrl+C to stop; resume pointers are saved in `sync_state` (a benign WebSocket close trace may appear)
+- Optional: live batching with `live.buffer_max` (default 1). Buffered rows are flushed on shutdown.
 
 ## Verify
 
@@ -75,6 +78,14 @@ Flow
 Shows Timescale extension status, hypertables, table coverage per pair, resume pointers, and 1m lag.
 
 Tip: set `PG*` env vars (e.g., `PGPASSWORD`) to avoid prompts.
+
+## Seed sample data
+
+You can seed synthetic OHLCV for quick tests:
+
+```bash
+qryptify-seed --pair BTCUSDT/1h --rows 500
+```
 
 ## Reset DB (clean slate)
 

@@ -32,6 +32,7 @@ dev = [
 qryptify-ingest = "main:main"
 qryptify-backtest = "qryptify_strategy.backtest:main"
 qryptify-optimize = "qryptify_strategy.optimize:main"
+qryptify-seed = "scripts.seed_ohlcv:main"
 
 [tool.hatch.build.targets.wheel]
 packages = [
