@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .indicators import true_range
 from .indicators import WilderATR

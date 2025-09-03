@@ -6,9 +6,7 @@ idempotently into TimescaleDB and advancing the resume pointer per pair.
 from __future__ import annotations
 
 from datetime import datetime
-from datetime import timedelta
 from datetime import timezone
-from typing import Dict
 
 from loguru import logger
 

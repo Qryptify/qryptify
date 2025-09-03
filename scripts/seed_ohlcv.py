@@ -17,16 +17,9 @@ from datetime import timezone
 import math
 from pathlib import Path
 import random
-import sys
 from typing import List
 
 import yaml
-
-# Ensure repository root is on sys.path so absolute imports work when running
-# this script via a file path (python scripts/seed_ohlcv.py)
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 from qryptify.data.timescale import TimescaleRepo
 from qryptify.shared.intervals import step_of

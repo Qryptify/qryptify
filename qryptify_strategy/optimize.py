@@ -396,7 +396,8 @@ def main() -> None:
     out_path = cfg.get("out", args.out)
     full_out = cfg.get("full_out", args.full_out)
     pareto_dir = cfg.get("pareto_dir", args.pareto_dir)
-    md_out = cfg.get("md_out", args.md_out)
+    # Normalize md_out from config/CLI for downstream write below
+    args.md_out = cfg.get("md_out", args.md_out)
 
     from qryptify.data.timescale import TimescaleRepo
     dsn = load_cfg_dsn()

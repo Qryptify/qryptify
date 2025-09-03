@@ -24,6 +24,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
+          pip install pytest ruff mypy
+      - name: Run ruff (lint)
+        run: ruff .
+      - name: Run mypy (type check)
+        run: |
+          mypy qryptify qryptify_ingestor qryptify_strategy
       - name: Run tests
         run: pytest -q
