@@ -18,10 +18,11 @@ See component READMEs for focused guides:
 docker compose up -d
 ```
 
-2. Install the package in editable mode (provides console scripts and dependencies):
+2. Install the package. For development (lint/type/test), use the dev extras:
 
 ```bash
-python -m pip install -e .
+python -m pip install -U pip
+python -m pip install -e ".[dev]"
 ```
 
 3. Configure pairs and DSN in `qryptify_ingestor/config.yaml`, then ingest and verify:
@@ -117,10 +118,10 @@ Run hooks again if they modify files.
 
 ### Local Dev Tips
 
-- Install in editable mode so scripts and package imports work seamlessly:
+- Install dev dependencies so `ruff`, `mypy`, and `pytest` are available:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev]"
 ```
 
 - Lint, type-check, and test (using this env’s Python):
